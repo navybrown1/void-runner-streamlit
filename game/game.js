@@ -48,11 +48,24 @@
         maxCombo: 1,
         wave: 1,
         shield: 0,
+        teamLives: 6,
         overdriveTimer: 0,
         lastShot: 0
     };
 
-    const input = { x: 0, y: 0, fire: false, mouse: { x: 0, y: 0, down: false, active: false } };
+    const input = {
+        p1: {
+            x: 0, y: 0,
+            left: false, right: false, up: false, down: false,
+            fire: false,
+            mouse: { x: 0, y: 0, down: false, active: false }
+        },
+        p2: {
+            x: 0, y: 0,
+            left: false, right: false, up: false, down: false,
+            fire: false
+        }
+    };
 
     // --- WEAPON DEFINITIONS ---
     const WEAPONS = {
@@ -114,16 +127,23 @@
             c.width = w; c.height = h;
             return { c, ctx: c.getContext('2d') };
         },
-        genPlayer() {
+        genPlayer(theme = {}) {
             const { c, ctx } = this.createCanvas(160, 160);
             const cx = 80, cy = 80;
+            const neon = theme.neon || '#00f3ff';
+            const wingGlowColor = theme.wingGlow || 'rgba(77, 158, 255, 0.4)';
+            const hull = theme.hull || '#0a1830';
+            const wing = theme.wing || '#162845';
+            const cockpit = theme.cockpit || '#ccffff';
+            const engineCore = theme.engineCore || 'rgba(0, 255, 255, 1)';
+            const engineMid = theme.engineMid || 'rgba(0, 200, 255, 0.6)';
             
             // Triple Engine Glow
             for(let i=0; i<3; i++) {
                 const xOff = (i-1) * 25;
                 const g = ctx.createRadialGradient(cx+xOff, cy+45, 3, cx+xOff, cy+45, 25);
-                g.addColorStop(0, 'rgba(0, 255, 255, 1)');
-                g.addColorStop(0.5, 'rgba(0, 200, 255, 0.6)');
+                g.addColorStop(0, engineCore);
+                g.addColorStop(0.5, engineMid);
                 g.addColorStop(1, 'rgba(0, 0, 0, 0)');
                 ctx.fillStyle = g;
                 ctx.fillRect(0,0,160,160);
@@ -131,16 +151,16 @@
 
             // Wing Glows
             const wingGlow = ctx.createRadialGradient(cx, cy, 10, cx, cy, 50);
-            wingGlow.addColorStop(0, 'rgba(77, 158, 255, 0.4)');
+            wingGlow.addColorStop(0, wingGlowColor);
             wingGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
             ctx.fillStyle = wingGlow;
             ctx.fillRect(0,0,160,160);
 
             // Main Hull
             ctx.shadowBlur = 20;
-            ctx.shadowColor = '#00f3ff';
-            ctx.fillStyle = '#0a1830';
-            ctx.strokeStyle = '#00f3ff';
+            ctx.shadowColor = neon;
+            ctx.fillStyle = hull;
+            ctx.strokeStyle = neon;
             ctx.lineWidth = 3.5;
             
             ctx.beginPath();
@@ -155,7 +175,7 @@
             ctx.stroke();
 
             // Wings
-            ctx.fillStyle = '#162845';
+            ctx.fillStyle = wing;
             ctx.beginPath();
             ctx.moveTo(cx-30, cy+10);
             ctx.lineTo(cx-50, cy+30);
@@ -174,8 +194,8 @@
 
             // Cockpit with glow
             ctx.shadowBlur = 15;
-            ctx.shadowColor = '#00ffff';
-            ctx.fillStyle = '#ccffff';
+            ctx.shadowColor = neon;
+            ctx.fillStyle = cockpit;
             ctx.beginPath();
             ctx.ellipse(cx, cy-8, 8, 16, 0, 0, Math.PI*2);
             ctx.fill();
@@ -198,6 +218,7 @@
             }
 
             this.cache.player = c;
+            return c;
         },
         genAsteroid(size, seed, type = 'normal') {
             const dim = size * 3;
@@ -276,7 +297,24 @@
             return c;
         },
         init() {
-            this.genPlayer();
+            this.cache.player1 = this.genPlayer({
+                neon: '#00f3ff',
+                wingGlow: 'rgba(77, 158, 255, 0.45)',
+                hull: '#0a1830',
+                wing: '#162845',
+                cockpit: '#ccffff',
+                engineCore: 'rgba(0, 255, 255, 1)',
+                engineMid: 'rgba(0, 200, 255, 0.6)'
+            });
+            this.cache.player2 = this.genPlayer({
+                neon: '#ff5ef2',
+                wingGlow: 'rgba(255, 110, 215, 0.42)',
+                hull: '#301038',
+                wing: '#4a1760',
+                cockpit: '#ffe2ff',
+                engineCore: 'rgba(255, 122, 240, 1)',
+                engineMid: 'rgba(255, 82, 210, 0.62)'
+            });
             
             // Generate variety of asteroids
             this.asteroidSmall = this.genAsteroid(15, 5, 'normal');
@@ -481,29 +519,56 @@
     }
 
     class Player extends Entity {
-        constructor() {
-            super(state.width/2, state.height - 120);
+        constructor(index) {
+            const spawnX = state.width * (index === 0 ? 0.36 : 0.64);
+            super(spawnX, state.height - 120);
+            this.index = index;
+            this.name = index === 0 ? 'P1' : 'P2';
+            this.accent = index === 0 ? '#00f3ff' : '#ff5ef2';
+            this.engineColorA = index === 0 ? '#00f3ff' : '#ff5ef2';
+            this.engineColorB = index === 0 ? '#4d9eff' : '#ff9a66';
+            this.sprite = index === 0 ? Assets.cache.player1 : Assets.cache.player2;
             this.w = 50;
             this.h = 50;
-            this.weapon = 'BLASTER';
+            this.weapon = index === 0 ? 'BLASTER' : 'LASER';
             this.heat = 0;
             this.overheated = false;
             this.tilt = 0;
             this.hp = 100;
+            this.alive = true;
+            this.invuln = 1.6;
+            this.respawnTimer = 0;
+            this.lastShot = 0;
         }
         update(dt) {
+            if(!this.alive) {
+                this.respawnTimer -= dt;
+                if(this.respawnTimer <= 0 && state.teamLives > 0) {
+                    this.alive = true;
+                    this.invuln = 2.2;
+                    this.heat = 0;
+                    this.overheated = false;
+                    this.vx = 0;
+                    this.vy = 0;
+                    this.x = state.width * (this.index === 0 ? 0.36 : 0.64);
+                    this.y = state.height - 120;
+                }
+                return;
+            }
+
             const speed = state.overdriveTimer > 0 ? 540 : 450;
             let tx = 0, ty = 0;
+            const ctrl = this.index === 0 ? input.p1 : input.p2;
             
-            if(input.x) tx = input.x * speed;
-            else if(input.mouse.active) {
-                const dx = input.mouse.x - this.x;
+            if(ctrl.x) tx = ctrl.x * speed;
+            else if(this.index === 0 && input.p1.mouse.active) {
+                const dx = input.p1.mouse.x - this.x;
                 if(Math.abs(dx) > 8) tx = Math.sign(dx) * speed;
             }
             
-            if(input.y) ty = input.y * speed;
-            else if(input.mouse.active) {
-                const dy = input.mouse.y - this.y;
+            if(ctrl.y) ty = ctrl.y * speed;
+            else if(this.index === 0 && input.p1.mouse.active) {
+                const dy = input.p1.mouse.y - this.y;
                 if(Math.abs(dy) > 8) ty = Math.sign(dy) * speed;
             }
 
@@ -520,12 +585,13 @@
             // Heat management
             this.heat = Math.max(0, this.heat - (state.overdriveTimer > 0 ? 55 : 35)*dt);
             if(this.heat < 60) this.overheated = false;
+            this.invuln = Math.max(0, this.invuln - dt);
 
             // Shooting
-            if((input.fire || input.mouse.down) && !this.overheated) {
+            if((ctrl.fire || (this.index === 0 && input.p1.mouse.down)) && !this.overheated) {
                 const wep = WEAPONS[this.weapon];
                 const fireDelay = state.overdriveTimer > 0 ? wep.delay * 0.55 : wep.delay;
-                if(state.t - state.lastShot > fireDelay) {
+                if(state.t - this.lastShot > fireDelay) {
                     this.shoot();
                 }
             }
@@ -535,7 +601,7 @@
             if(Math.random() < thrustChance) {
                 const xOff = (Math.random() - 0.5) * 35;
                 Entities.particles.push(new Particle(this.x + xOff, this.y + 35, {
-                    color: Math.random() > 0.5 ? '#00f3ff' : '#4d9eff',
+                    color: Math.random() > 0.5 ? this.engineColorA : this.engineColorB,
                     speed: 40,
                     size: Math.random()*4 + 1,
                     life: 0.4,
@@ -546,7 +612,7 @@
             }
         }
         shoot() {
-            state.lastShot = state.t;
+            this.lastShot = state.t;
             const wep = WEAPONS[this.weapon];
             this.heat += wep.heat * (state.overdriveTimer > 0 ? 0.62 : 1);
             state.shake += this.weapon === 'RAILGUN' ? 8 : (this.weapon === 'PLASMA' ? 6 : 3);
@@ -617,19 +683,24 @@
             }
         }
         draw(ctx) {
+            if(!this.alive) return;
+            const flicker = this.invuln > 0 && Math.sin(state.t * 26) > 0.2;
+            if(flicker) return;
             ctx.save();
             ctx.translate(this.x, this.y);
             ctx.rotate(this.tilt);
-            ctx.drawImage(Assets.cache.player, -80, -80);
+            ctx.drawImage(this.sprite, -80, -80);
             ctx.restore();
 
-            if(state.shield > 0) {
+            if(state.shield > 0 || this.invuln > 0) {
                 const pulse = 0.55 + Math.sin(state.t * 8) * 0.22;
                 ctx.globalCompositeOperation = 'lighter';
-                ctx.strokeStyle = 'rgba(106, 216, 255, ' + pulse.toFixed(3) + ')';
+                const shieldAlpha = (state.shield > 0 ? 0.7 : 0.35) * pulse;
+                const ringColor = this.index === 0 ? '106, 216, 255' : '255, 110, 231';
+                ctx.strokeStyle = 'rgba(' + ringColor + ', ' + shieldAlpha.toFixed(3) + ')';
                 ctx.lineWidth = 2.3;
                 ctx.shadowBlur = 18;
-                ctx.shadowColor = '#6ad8ff';
+                ctx.shadowColor = this.index === 0 ? '#6ad8ff' : '#ff68ea';
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, 38 + Math.sin(state.t * 5) * 2, 0, Math.PI * 2);
                 ctx.stroke();
@@ -779,7 +850,7 @@
             const dx = tx - x;
             const dy = ty - y;
             const len = Math.max(1, Math.hypot(dx, dy));
-            const speed = 320 + Math.min(320, state.wave * 28);
+            const speed = 220 + Math.min(220, state.wave * 20);
             this.vx = (dx / len) * speed;
             this.vy = (dy / len) * speed;
             this.r = 5;
@@ -822,12 +893,12 @@
             this.r = 22;
             this.w = 48;
             this.h = 26;
-            this.hp = 8 + Math.floor(state.wave * 0.8);
+            this.hp = 5 + Math.floor(state.wave * 0.45);
             this.maxHp = this.hp;
-            this.vx = (Math.random() > 0.5 ? 1 : -1) * (100 + Math.random() * 90);
-            this.vy = 40 + Math.random() * 40;
+            this.vx = (Math.random() > 0.5 ? 1 : -1) * (70 + Math.random() * 60);
+            this.vy = 28 + Math.random() * 24;
             this.sway = Math.random() * Math.PI * 2;
-            this.fireCd = 1.1 + Math.random() * 1.2;
+            this.fireCd = 1.6 + Math.random() * 1.2;
             this.flash = 0;
         }
         update(dt) {
@@ -842,10 +913,12 @@
 
             this.fireCd -= dt;
             if(this.fireCd <= 0 && !state.gameOver) {
-                const p = Entities.player;
-                Entities.enemyBullets.push(new EnemyBolt(this.x, this.y + 10, p.x, p.y));
-                Audio.sfx.enemyShot();
-                this.fireCd = Math.max(0.55, 1.4 - state.wave * 0.05) + Math.random() * 0.8;
+                const p = Entities.closestAlivePlayer(this.x, this.y + 10);
+                if(p) {
+                    Entities.enemyBullets.push(new EnemyBolt(this.x, this.y + 10, p.x, p.y));
+                    Audio.sfx.enemyShot();
+                }
+                this.fireCd = Math.max(1.05, 1.9 - state.wave * 0.03) + Math.random() * 1.0;
             }
 
             this.flash = Math.max(0, this.flash - dt * 4);
@@ -943,10 +1016,10 @@
             this.sizeClass = sizeClass;
             this.type = type;
             this.r = sizeClass === 1 ? 15 : (sizeClass === 2 ? 32 : 55);
-            this.hp = sizeClass * (type === 'metal' ? 5 : 3);
+            this.hp = sizeClass * (type === 'metal' ? 4 : 2);
             this.maxHp = this.hp;
             this.vx = (Math.random()-0.5) * 60;
-            this.vy = Math.random() * 100 + 60 + (state.score*0.08);
+            this.vy = Math.random() * 70 + 45 + (state.score * 0.045);
             this.rotSpeed = (Math.random()-0.5) * 2.5;
             
             // Select appropriate sprite
@@ -1146,7 +1219,8 @@
                     x: Math.random() * state.width,
                     y: Math.random() * state.height,
                     z: Math.random() * 3,
-                    size: Math.random() * 2 + 0.5
+                    size: Math.random() * 2 + 0.5,
+                    hue: Math.random() * 360
                 });
             }
         }
@@ -1160,16 +1234,17 @@
             }
         }
         draw(ctx) {
-            ctx.fillStyle = '#ffffff';
             for(const star of this.stars) {
                 const alpha = 0.3 + (star.z / 3) * 0.6;
                 ctx.globalAlpha = alpha;
+                const hue = (star.hue + state.t * (8 + star.z * 10)) % 360;
+                ctx.fillStyle = `hsla(${hue.toFixed(1)}, 90%, 78%, 1)`;
                 
                 if(star.z > 2) {
                     // Bright stars get a glow
                     ctx.globalCompositeOperation = 'lighter';
                     ctx.shadowBlur = 4;
-                    ctx.shadowColor = '#ffffff';
+                    ctx.shadowColor = `hsla(${hue.toFixed(1)}, 95%, 80%, 1)`;
                 }
                 
                 ctx.beginPath();
@@ -1185,7 +1260,7 @@
 
     // --- GAME MANAGER ---
     const Entities = {
-        player: null,
+        players: [],
         bullets: [],
         enemyBullets: [],
         enemies: [],
@@ -1195,7 +1270,7 @@
         starfield: null,
         
         clear() {
-            this.player = new Player();
+            this.players = [new Player(0), new Player(1)];
             this.bullets = [];
             this.enemyBullets = [];
             this.enemies = [];
@@ -1204,10 +1279,79 @@
             this.overlays = [];
             this.starfield = new Starfield();
         },
+
+        alivePlayers() {
+            return this.players.filter(p => p.alive);
+        },
+
+        closestAlivePlayer(x, y) {
+            const alive = this.alivePlayers();
+            if(alive.length === 0) return null;
+            let best = alive[0];
+            let bestDist = Infinity;
+            for(const p of alive) {
+                const d = Math.hypot(p.x - x, p.y - y);
+                if(d < bestDist) {
+                    bestDist = d;
+                    best = p;
+                }
+            }
+            return best;
+        },
+
+        eliminatePlayer(player, hitX, hitY) {
+            if(!player || !player.alive || player.invuln > 0) return;
+            if(state.shield > 0) {
+                state.shield--;
+                state.shake += 8;
+                Audio.sfx.shieldAbsorb();
+                for(let i=0; i<18; i++) {
+                    this.particles.push(new Particle(hitX, hitY, {
+                        color: player.index === 0 ? '#6ad8ff' : '#ff82ef',
+                        size: Math.random()*3 + 2,
+                        speed: 230,
+                        life: 0.48,
+                        mode: 'add',
+                        glow: true
+                    }));
+                }
+                player.invuln = 1.2;
+                return;
+            }
+
+            state.teamLives = Math.max(0, state.teamLives - 1);
+            player.alive = false;
+            player.respawnTimer = 2.8;
+            state.shake += 12;
+            Audio.sfx.explode();
+
+            for(let i=0; i<36; i++) {
+                this.particles.push(new Particle(hitX, hitY, {
+                    color: player.index === 0 ? '#00f3ff' : '#ff63ec',
+                    size: Math.random()*5 + 2,
+                    speed: 270,
+                    life: 1.0,
+                    drag: 0.9,
+                    mode: 'add',
+                    glow: true
+                }));
+            }
+
+            if(state.teamLives <= 0 && this.alivePlayers().length === 0) {
+                state.gameOver = true;
+                ui.finalScore.innerText = Math.floor(state.score);
+                ui.finalKills.innerText = state.kills;
+                ui.maxCombo.innerText = 'x' + state.maxCombo;
+                ui.start.classList.add('hidden');
+                ui.score.classList.add('hidden');
+                ui.over.classList.remove('hidden');
+                state.running = false;
+            }
+        },
         
         update(dt) {
             this.starfield.update(dt);
-            this.player.update(dt);
+            this.players.forEach(p => p.update(dt));
             this.bullets.forEach(e => e.update(dt));
             this.enemyBullets.forEach(e => e.update(dt));
             this.enemies.forEach(e => e.update(dt));
@@ -1237,51 +1381,17 @@
                 }
             }
             
-            // Collision: Player vs Enemy (Game Over)
-            const p = this.player;
+            // Collision: Player vs Enemy
             for(const e of this.enemies) {
                 if(e.dead) continue;
-                const dist = Math.hypot(p.x - e.x, p.y - e.y);
-                if(dist < 35 + e.r) {
-                    if(state.shield > 0) {
-                        state.shield--;
+                for(const p of this.players) {
+                    if(!p.alive) continue;
+                    const dist = Math.hypot(p.x - e.x, p.y - e.y);
+                    if(dist < 35 + e.r) {
                         e.dead = true;
-                        state.shake += 10;
-                        Audio.sfx.shieldAbsorb();
-                        for(let i=0; i<25; i++) {
-                            this.particles.push(new Particle(p.x, p.y, {
-                                color: '#6ad8ff',
-                                size: Math.random()*3 + 2,
-                                speed: 260,
-                                life: 0.55,
-                                mode: 'add',
-                                glow: true
-                            }));
-                        }
-                    } else {
-                        state.gameOver = true;
-                        Audio.sfx.explode();
-                        ui.finalScore.innerText = Math.floor(state.score);
-                        ui.finalKills.innerText = state.kills;
-                        ui.maxCombo.innerText = 'x' + state.maxCombo;
-                        ui.start.classList.add('hidden');
-                        ui.score.classList.add('hidden');
-                        ui.over.classList.remove('hidden');
-                        state.running = false;
-
-                        // Death explosion
-                        for(let i=0; i<50; i++) {
-                            this.particles.push(new Particle(p.x, p.y, {
-                                color: Math.random()>0.5 ? '#00f3ff' : '#ff4757',
-                                size: Math.random()*6 + 2,
-                                speed: 300,
-                                life: 1.2,
-                                drag: 0.9,
-                                mode: 'add',
-                                glow: true
-                            }));
-                        }
-                        return;
+                        this.eliminatePlayer(p, p.x, p.y);
+                        if(state.gameOver) return;
+                        break;
                     }
                 }
             }
@@ -1289,32 +1399,13 @@
             // Collision: Player vs Enemy Bullets
             for(const eb of this.enemyBullets) {
                 if(eb.dead) continue;
-                if(Math.hypot(p.x - eb.x, p.y - eb.y) < 34 + eb.r) {
-                    eb.dead = true;
-                    if(state.shield > 0) {
-                        state.shield--;
-                        Audio.sfx.shieldAbsorb();
-                        for(let i=0; i<16; i++) {
-                            this.particles.push(new Particle(p.x, p.y, {
-                                color: '#7edfff',
-                                size: 2.4,
-                                speed: 220,
-                                life: 0.42,
-                                mode: 'add',
-                                glow: true
-                            }));
-                        }
-                    } else {
-                        state.gameOver = true;
-                        Audio.sfx.explode();
-                        ui.finalScore.innerText = Math.floor(state.score);
-                        ui.finalKills.innerText = state.kills;
-                        ui.maxCombo.innerText = 'x' + state.maxCombo;
-                        ui.start.classList.add('hidden');
-                        ui.score.classList.add('hidden');
-                        ui.over.classList.remove('hidden');
-                        state.running = false;
-                        return;
+                for(const p of this.players) {
+                    if(!p.alive) continue;
+                    if(Math.hypot(p.x - eb.x, p.y - eb.y) < 34 + eb.r) {
+                        eb.dead = true;
+                        this.eliminatePlayer(p, eb.x, eb.y);
+                        if(state.gameOver) return;
+                        break;
                     }
                 }
             }
@@ -1322,44 +1413,51 @@
             // Collision: Player vs Powerup
             for(const pup of this.spawns) {
                 if(pup.dead) continue;
-                if(Math.hypot(p.x - pup.x, p.y - pup.y) < 35) {
-                    if(pup.isUtility) {
-                        if(pup.type === 'SHIELD') {
-                            state.shield = Math.min(5, state.shield + 1);
-                            ui.status.innerText = "SHIELD CHARGE +" + 1;
-                        } else if(pup.type === 'COOLANT') {
-                            p.heat = Math.max(0, p.heat - 45);
-                            ui.status.innerText = "THERMAL VENT ENGAGED";
-                        } else if(pup.type === 'OVERDRIVE') {
-                            state.overdriveTimer = 10;
-                            p.heat = Math.max(0, p.heat - 25);
-                            ui.status.innerText = "OVERDRIVE ONLINE";
-                            Audio.sfx.overdriveStart();
+                for(const p of this.players) {
+                    if(!p.alive) continue;
+                    if(pup.dead) break;
+                    if(Math.hypot(p.x - pup.x, p.y - pup.y) < 35) {
+                        if(pup.isUtility) {
+                            if(pup.type === 'SHIELD') {
+                                state.shield = Math.min(8, state.shield + 2);
+                                ui.status.innerText = "SHIELD BOOST +" + 2;
+                            } else if(pup.type === 'COOLANT') {
+                                for(const ally of this.players) {
+                                    ally.heat = Math.max(0, ally.heat - 40);
+                                }
+                                ui.status.innerText = "TEAM COOLANT ACTIVE";
+                            } else if(pup.type === 'OVERDRIVE') {
+                                state.overdriveTimer = 12;
+                                for(const ally of this.players) {
+                                    ally.heat = Math.max(0, ally.heat - 20);
+                                }
+                                ui.status.innerText = "OVERDRIVE ONLINE";
+                                Audio.sfx.overdriveStart();
+                            }
+                            Audio.sfx.utilityPickup();
+                        } else {
+                            p.weapon = pup.type;
+                            const wep = WEAPONS[pup.type];
+                            ui.weapon.innerText = wep.name;
+                            ui.weaponIcon.innerText = wep.icon;
+                            ui.weaponIcon.style.filter = `drop-shadow(0 0 8px ${wep.color})`;
+                            Audio.sfx.powerup();
+                            ui.status.innerText = p.name + " WEAPON: " + wep.name;
                         }
-                        Audio.sfx.utilityPickup();
-                    } else {
-                        p.weapon = pup.type;
-                        const wep = WEAPONS[pup.type];
-                        ui.weapon.innerText = wep.name;
-                        ui.weaponIcon.innerText = wep.icon;
-                        ui.weaponIcon.style.filter = `drop-shadow(0 0 8px ${wep.color})`;
-                        Audio.sfx.powerup();
-                        ui.status.innerText = "WEAPON: " + wep.name;
-                    }
 
-                    pup.dead = true;
-                    setTimeout(() => ui.status.innerText = "READY", 2500);
-                    
-                    // Pickup particles
-                    for(let i=0; i<20; i++) {
-                        this.particles.push(new Particle(pup.x, pup.y, {
-                            color: wep.color,
-                            size: 3,
-                            speed: 150,
-                            life: 0.8,
-                            mode: 'add',
-                            glow: true
-                        }));
+                        pup.dead = true;
+                        setTimeout(() => ui.status.innerText = "READY", 2000);
+                        const pickupColor = pup.color || '#ffffff';
+                        for(let i=0; i<20; i++) {
+                            this.particles.push(new Particle(pup.x, pup.y, {
+                                color: pickupColor,
+                                size: 3,
+                                speed: 150,
+                                life: 0.8,
+                                mode: 'add',
+                                glow: true
+                            }));
+                        }
                     }
                 }
             }
@@ -1377,7 +1475,7 @@
             this.spawns.forEach(e => e.draw(ctx));
             this.enemies.forEach(e => e.draw(ctx));
             this.enemyBullets.forEach(e => e.draw(ctx));
-            this.player.draw(ctx);
+            this.players.forEach(p => p.draw(ctx));
             this.bullets.forEach(e => e.draw(ctx));
             this.particles.forEach(e => e.draw(ctx));
         }
@@ -1404,34 +1502,34 @@
         }
 
         if(state.running && !state.gameOver) {
-            state.wave = 1 + Math.floor(state.score / 2200);
+            state.wave = 1 + Math.floor(state.score / 3000);
             if(state.overdriveTimer > 0) {
                 state.overdriveTimer = Math.max(0, state.overdriveTimer - dt);
             }
 
             // Enemy spawning
             spawnTimer += dt;
-            const spawnRate = Math.max(0.22, 1.15 - state.score/7000 - state.wave * 0.03);
+            const spawnRate = Math.max(0.42, 1.55 - state.score/9000 - state.wave * 0.015);
             if(spawnTimer > spawnRate) {
                 spawnTimer = 0;
                 
                 // Size distribution
                 const r = Math.random();
-                const size = r < 0.45 ? 1 : (r < 0.82 ? 2 : 3);
+                const size = r < 0.55 ? 1 : (r < 0.88 ? 2 : 3);
                 
                 // Type distribution
                 const tr = Math.random();
-                const eliteChance = Math.min(0.22, state.wave * 0.015);
+                const eliteChance = Math.min(0.14, state.wave * 0.01);
                 const type = tr < (0.6 - eliteChance) ? 'normal' : (tr < (0.8 - eliteChance * 0.4) ? 'crystal' : 'metal');
                 
                 Entities.enemies.push(new Asteroid(Math.random()*state.width, -80, size, type));
             }
 
             droneSpawnTimer += dt;
-            const droneRate = Math.max(2.2, 7.2 - state.wave * 0.3);
-            if(droneSpawnTimer > droneRate && state.score > 1200) {
+            const droneRate = Math.max(4.8, 9.5 - state.wave * 0.12);
+            if(droneSpawnTimer > droneRate && state.score > 2800) {
                 droneSpawnTimer = 0;
-                if(Entities.enemies.filter(e => e instanceof Drone).length < 5) {
+                if(Entities.enemies.filter(e => e instanceof Drone).length < 2) {
                     const side = Math.random() < 0.5 ? -40 : state.width + 40;
                     const y = 90 + Math.random() * (state.height * 0.3);
                     Entities.enemies.push(new Drone(side, y));
@@ -1446,14 +1544,27 @@
             ui.wave.innerText = state.wave;
             ui.combo.innerText = 'x' + state.combo.toFixed(1);
             ui.comboChip.classList.toggle('hot', state.combo >= 4);
-            ui.shield.innerText = state.shield;
+            ui.shield.innerText = state.shield + ' | L' + state.teamLives;
             ui.shield.classList.toggle('active', state.shield > 0);
             
-            const heatPercent = Math.floor(Entities.player.heat);
-            ui.heat.innerText = heatPercent + "%";
+            const p1 = Entities.players[0];
+            const p2 = Entities.players[1];
+            const heat1 = p1 ? Math.floor(p1.heat) : 0;
+            const heat2 = p2 ? Math.floor(p2.heat) : 0;
+            const heatPercent = Math.floor((heat1 + heat2) / 2);
+            ui.heat.innerText = `P1 ${heat1}% | P2 ${heat2}%`;
             ui.heatBar.style.width = heatPercent + '%';
+
+            const alivePlayers = Entities.alivePlayers();
+            if(alivePlayers.length > 0) {
+                ui.weapon.innerText = `P1 ${WEAPONS[p1.weapon].icon} · P2 ${WEAPONS[p2.weapon].icon}`;
+                ui.weaponIcon.innerText = alivePlayers.length === 2 ? '⚔' : '⚡';
+                ui.weaponIcon.style.filter = alivePlayers.length === 2
+                    ? 'drop-shadow(0 0 10px #9bffe4)'
+                    : 'drop-shadow(0 0 8px #ff7ee9)';
+            }
             
-            if(Entities.player.overheated) {
+            if((p1 && p1.overheated) || (p2 && p2.overheated)) {
                 ui.heat.className = 'value critical';
                 ui.heatBar.className = 'heat-bar critical';
             } else if(heatPercent > 70) {
@@ -1465,7 +1576,10 @@
             }
 
             ui.status.classList.remove('overdrive', 'alert');
-            if(Entities.player.overheated) {
+            if(Entities.alivePlayers().length <= 1 && state.teamLives <= 2) {
+                ui.status.innerText = "CRITICAL: LAST CHANCE";
+                ui.status.classList.add('alert');
+            } else if((p1 && p1.overheated) || (p2 && p2.overheated)) {
                 ui.status.innerText = "WEAPON OVERHEATED";
                 ui.status.classList.add('alert');
             } else if(state.overdriveTimer > 0) {
@@ -1482,7 +1596,27 @@
     // --- RENDERER ---
     function render(dt) {
         // Clear
-        ctx.fillStyle = '#01030a';
+        const hue = (state.t * 18) % 360;
+        const rainbowBg = ctx.createLinearGradient(0, 0, state.width, state.height);
+        rainbowBg.addColorStop(0, `hsla(${hue.toFixed(1)}, 75%, 10%, 1)`);
+        rainbowBg.addColorStop(0.33, `hsla(${((hue + 90) % 360).toFixed(1)}, 72%, 10%, 1)`);
+        rainbowBg.addColorStop(0.66, `hsla(${((hue + 180) % 360).toFixed(1)}, 70%, 9%, 1)`);
+        rainbowBg.addColorStop(1, `hsla(${((hue + 270) % 360).toFixed(1)}, 72%, 10%, 1)`);
+        ctx.fillStyle = rainbowBg;
+        ctx.fillRect(0, 0, state.width, state.height);
+
+        const nebula = ctx.createRadialGradient(
+            state.width * 0.2 + Math.sin(state.t * 0.5) * 80,
+            state.height * 0.3,
+            20,
+            state.width * 0.2,
+            state.height * 0.3,
+            state.width * 0.65
+        );
+        nebula.addColorStop(0, `hsla(${((hue + 35) % 360).toFixed(1)}, 90%, 55%, 0.14)`);
+        nebula.addColorStop(0.5, `hsla(${((hue + 165) % 360).toFixed(1)}, 88%, 52%, 0.09)`);
+        nebula.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = nebula;
         ctx.fillRect(0, 0, state.width, state.height);
 
         // Screen Shake
@@ -1564,7 +1698,8 @@
         state.maxCombo = 1;
         state.comboTimer = 0;
         state.wave = 1;
-        state.shield = 0;
+        state.shield = 4;
+        state.teamLives = 6;
         state.overdriveTimer = 0;
         lastTime = performance.now();
         spawnTimer = 0;
@@ -1578,52 +1713,74 @@
         ui.kills.innerText = '0';
         ui.wave.innerText = '1';
         ui.combo.innerText = 'x1.0';
-        ui.shield.innerText = '0';
-        ui.shield.classList.remove('active');
+        ui.shield.innerText = '4 | L6';
+        ui.shield.classList.add('active');
         ui.comboChip.classList.remove('hot');
         
-        const wep = WEAPONS.BLASTER;
-        ui.weapon.innerText = wep.name;
-        ui.weaponIcon.innerText = wep.icon;
-        ui.weaponIcon.style.filter = `drop-shadow(0 0 8px ${wep.color})`;
+        ui.weapon.innerText = 'P1 ⚡ · P2 ═';
+        ui.weaponIcon.innerText = '⚔';
+        ui.weaponIcon.style.filter = 'drop-shadow(0 0 10px #9bffe4)';
     }
 
     // Input
     window.addEventListener('resize', resize);
+
+    function refreshAxes() {
+        input.p1.x = (input.p1.right ? 1 : 0) - (input.p1.left ? 1 : 0);
+        input.p1.y = (input.p1.down ? 1 : 0) - (input.p1.up ? 1 : 0);
+        input.p2.x = (input.p2.right ? 1 : 0) - (input.p2.left ? 1 : 0);
+        input.p2.y = (input.p2.down ? 1 : 0) - (input.p2.up ? 1 : 0);
+    }
     
     window.addEventListener('keydown', e => {
-        if(e.code === 'KeyW' || e.code === 'ArrowUp') input.y = -1;
-        if(e.code === 'KeyS' || e.code === 'ArrowDown') input.y = 1;
-        if(e.code === 'KeyA' || e.code === 'ArrowLeft') input.x = -1;
-        if(e.code === 'KeyD' || e.code === 'ArrowRight') input.x = 1;
-        if(e.code === 'Space') { input.fire = true; e.preventDefault(); }
+        if(e.code === 'KeyW') input.p1.up = true;
+        if(e.code === 'KeyS') input.p1.down = true;
+        if(e.code === 'KeyA') input.p1.left = true;
+        if(e.code === 'KeyD') input.p1.right = true;
+        if(e.code === 'Space') { input.p1.fire = true; e.preventDefault(); }
+
+        if(e.code === 'ArrowUp') input.p2.up = true;
+        if(e.code === 'ArrowDown') input.p2.down = true;
+        if(e.code === 'ArrowLeft') input.p2.left = true;
+        if(e.code === 'ArrowRight') input.p2.right = true;
+        if(e.code === 'Enter' || e.code === 'Numpad0' || e.code === 'Slash') input.p2.fire = true;
+
+        refreshAxes();
         if(!state.running) startGame();
     });
     
     window.addEventListener('keyup', e => {
-        if((e.code === 'KeyW' || e.code === 'ArrowUp') && input.y < 0) input.y = 0;
-        if((e.code === 'KeyS' || e.code === 'ArrowDown') && input.y > 0) input.y = 0;
-        if((e.code === 'KeyA' || e.code === 'ArrowLeft') && input.x < 0) input.x = 0;
-        if((e.code === 'KeyD' || e.code === 'ArrowRight') && input.x > 0) input.x = 0;
-        if(e.code === 'Space') input.fire = false;
+        if(e.code === 'KeyW') input.p1.up = false;
+        if(e.code === 'KeyS') input.p1.down = false;
+        if(e.code === 'KeyA') input.p1.left = false;
+        if(e.code === 'KeyD') input.p1.right = false;
+        if(e.code === 'Space') input.p1.fire = false;
+
+        if(e.code === 'ArrowUp') input.p2.up = false;
+        if(e.code === 'ArrowDown') input.p2.down = false;
+        if(e.code === 'ArrowLeft') input.p2.left = false;
+        if(e.code === 'ArrowRight') input.p2.right = false;
+        if(e.code === 'Enter' || e.code === 'Numpad0' || e.code === 'Slash') input.p2.fire = false;
+
+        refreshAxes();
     });
     
     const updatePointer = (e) => {
-        input.mouse.x = e.clientX;
-        input.mouse.y = e.clientY;
-        input.mouse.active = true;
+        input.p1.mouse.x = e.clientX;
+        input.p1.mouse.y = e.clientY;
+        input.p1.mouse.active = true;
     };
     
     canvas.addEventListener('pointerdown', e => {
         updatePointer(e);
-        input.mouse.down = true;
+        input.p1.mouse.down = true;
         if(!state.running) startGame();
     });
     canvas.addEventListener('pointermove', updatePointer);
-    canvas.addEventListener('pointerup', () => input.mouse.down = false);
+    canvas.addEventListener('pointerup', () => input.p1.mouse.down = false);
     canvas.addEventListener('pointerleave', () => {
-        input.mouse.active = false;
-        input.mouse.down = false;
+        input.p1.mouse.active = false;
+        input.p1.mouse.down = false;
     });
 
     ui.audioBtn.addEventListener('click', () => {
