@@ -141,6 +141,31 @@ body::before {
   text-shadow: 0 0 10px rgba(142, 255, 135, 0.62);
 }
 
+.weapon-chip {
+  min-width: 188px;
+}
+
+#weaponDisplay {
+  font-size: 20px;
+  color: #ffd98a;
+  text-shadow: 0 0 12px rgba(255, 187, 88, 0.65);
+}
+
+#heatDisplay {
+  color: #9fffb3;
+  text-shadow: 0 0 12px rgba(107, 255, 146, 0.65);
+}
+
+#heatDisplay.warning {
+  color: #ffc882;
+  text-shadow: 0 0 12px rgba(255, 186, 109, 0.8);
+}
+
+#heatDisplay.critical {
+  color: #ff9292;
+  text-shadow: 0 0 14px rgba(255, 108, 108, 0.95);
+}
+
 .hud-button {
   border: 1px solid rgba(142, 255, 135, 0.62);
   border-radius: 10px;
@@ -230,6 +255,25 @@ body::before {
   text-shadow: 0 0 12px rgba(255, 212, 120, 0.55);
 }
 
+.finalKills {
+  font-family: 'Oxanium', 'Rajdhani', sans-serif;
+  font-size: clamp(20px, 3.2vw, 28px);
+  color: #d5f6ff;
+  text-shadow: 0 0 10px rgba(115, 232, 255, 0.5);
+}
+
+#controlHint {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Oxanium', 'Rajdhani', sans-serif;
+  letter-spacing: 1.8px;
+  font-size: clamp(11px, 1.4vw, 14px);
+  color: rgba(186, 232, 255, 0.74);
+  text-shadow: 0 0 8px rgba(79, 192, 255, 0.34);
+}
+
 .hidden {
   display: none !important;
 }
@@ -274,6 +318,13 @@ body::before {
 }
 
 @media (max-width: 560px) {
+  #controlHint {
+    bottom: 10px;
+    width: calc(100% - 24px);
+    text-align: center;
+    letter-spacing: 1.2px;
+  }
+
   .panel {
     padding: 28px 20px;
   }

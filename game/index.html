@@ -24,6 +24,14 @@
         <span class="label">SCORE</span>
         <span id="scoreDisplay" class="value hidden">0</span>
       </div>
+      <div class="hud-chip weapon-chip">
+        <span class="label">WEAPON</span>
+        <span id="weaponDisplay" class="value">BLASTER MK-II</span>
+      </div>
+      <div class="hud-chip heat-chip">
+        <span class="label">HEAT</span>
+        <span id="heatDisplay" class="value">0%</span>
+      </div>
       <div class="hud-chip">
         <span class="label">STATUS</span>
         <span id="statusText" class="value">READY</span>
@@ -34,16 +42,20 @@
     <section id="startScreen" class="panel">
       <h1>VOID RUNNER</h1>
       <p class="subtitle">NEON SURVIVAL PROTOCOL</p>
-      <p>Dodge incoming asteroids as velocity escalates.</p>
+      <p>Destroy incoming asteroids before they breach your lane.</p>
       <p>Move with WASD or Arrow keys</p>
+      <p>Fire with Space or Hold Left Click</p>
       <p>Press any key or click to launch</p>
     </section>
 
     <section id="gameOverScreen" class="panel hidden">
       <h1>GAME OVER</h1>
       <p class="finalScore">Final Score: <span id="finalScore">0</span></p>
+      <p class="finalKills">Asteroids Shattered: <span id="finalKills">0</span></p>
       <p>Press any key or click to redeploy</p>
     </section>
+
+    <div id="controlHint">WASD / ARROWS MOVE · SPACE OR HOLD CLICK FIRE</div>
   </div>
 
   <script src="game.js"></script>
