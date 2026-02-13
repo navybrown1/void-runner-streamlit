@@ -57,6 +57,9 @@
   let weaponHeat = 0;
   let weaponOverheated = false;
   let pointerFiring = false;
+  let pointerSteering = false;
+  let pointerTargetX = 0;
+  let pointerTargetY = 0;
 
   const audio = createAudioEngine();
 
@@ -100,6 +103,21 @@
 
   function wantsToFire() {
     return Boolean(keys.Space || keys.KeyJ || pointerFiring);
+  }
+
+  function engageInputFocus() {
+    canvas.setAttribute('tabindex', '0');
+    try {
+      canvas.focus({ preventScroll: true });
+    } catch (err) {
+      canvas.focus();
+    }
+  }
+
+  function updatePointerTargetFromEvent(e) {
+    const rect = canvas.getBoundingClientRect();
+    pointerTargetX = clamp(e.clientX - rect.left, 0, canvas.width);
+    pointerTargetY = clamp(e.clientY - rect.top, 0, canvas.height);
   }
 
   function createAudioEngine() {
@@ -628,6 +646,7 @@
     weaponHeat = 0;
     weaponOverheated = false;
     pointerFiring = false;
+    pointerSteering = false;
     asteroids = [];
     bullets = [];
     particles = [];
@@ -677,8 +696,29 @@
     const moveUp = Boolean(keys.ArrowUp || keys.KeyW);
     const moveDown = Boolean(keys.ArrowDown || keys.KeyS);
 
-    player.vx = (moveRight - moveLeft) * PLAYER_SPEED;
-    player.vy = (moveDown - moveUp) * PLAYER_SPEED;
+    const keyboardVx = ((moveRight ? 1 : 0) - (moveLeft ? 1 : 0)) * PLAYER_SPEED;
+    const keyboardVy = ((moveDown ? 1 : 0) - (moveUp ? 1 : 0)) * PLAYER_SPEED;
+
+    if (pointerSteering) {
+      const c = shipCenter();
+      const dx = pointerTargetX - c.x;
+      const dy = pointerTargetY - c.y;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist > 2) {
+        const nx = dx / dist;
+        const ny = dy / dist;
+        const steerSpeed = PLAYER_SPEED * clamp(dist / 120, 0.32, 1);
+        player.vx = nx * steerSpeed;
+        player.vy = ny * steerSpeed;
+      } else {
+        player.vx = 0;
+        player.vy = 0;
+      }
+    } else {
+      player.vx = keyboardVx;
+      player.vy = keyboardVy;
+    }
 
     player.x += player.vx * dt;
     player.y += player.vy * dt;
@@ -689,7 +729,7 @@
     const targetTilt = clamp(player.vx / PLAYER_SPEED, -1, 1) * 0.5;
     player.tilt = lerp(player.tilt, targetTilt, 0.18);
 
-    const moving = moveLeft || moveRight || moveUp || moveDown;
+    const moving = Math.abs(player.vx) + Math.abs(player.vy) > 1;
     if (moving || wantsToFire()) {
       thrustParticleTimer += dt;
       while (thrustParticleTimer >= 0.012) {
@@ -1339,12 +1379,13 @@
 
   function launchOrRestart() {
     audio.unlock();
+    engageInputFocus();
     if (!running || gameOver) {
       startRun();
     }
   }
 
-  document.addEventListener('keydown', function (e) {
+  function onKeyDown(e) {
     if (
       e.code === 'ArrowLeft' ||
       e.code === 'ArrowRight' ||
@@ -1364,14 +1405,20 @@
     if (!running || gameOver) {
       launchOrRestart();
     }
-  });
+  }
 
-  document.addEventListener('keyup', function (e) {
+  function onKeyUp(e) {
     keys[e.code] = false;
-  });
+  }
+
+  document.addEventListener('keydown', onKeyDown);
+  document.addEventListener('keyup', onKeyUp);
+  canvas.addEventListener('keydown', onKeyDown);
+  canvas.addEventListener('keyup', onKeyUp);
 
   window.addEventListener('blur', function () {
     pointerFiring = false;
+    pointerSteering = false;
     for (const key of Object.keys(keys)) {
       keys[key] = false;
     }
@@ -1380,21 +1427,47 @@
   startScreen.addEventListener('click', launchOrRestart);
   gameOverScreen.addEventListener('click', launchOrRestart);
 
-  canvas.addEventListener('pointerdown', function () {
+  canvas.addEventListener('pointerdown', function (e) {
     audio.unlock();
+    engageInputFocus();
+    updatePointerTargetFromEvent(e);
+
     if (!running || gameOver) {
       launchOrRestart();
       return;
     }
+
+    if (typeof canvas.setPointerCapture === 'function') {
+      canvas.setPointerCapture(e.pointerId);
+    }
+
     pointerFiring = true;
+    pointerSteering = true;
+  });
+
+  canvas.addEventListener('pointermove', function (e) {
+    if (!pointerSteering) return;
+    updatePointerTargetFromEvent(e);
+  });
+
+  canvas.addEventListener('pointerup', function () {
+    pointerFiring = false;
+    pointerSteering = false;
+  });
+
+  canvas.addEventListener('pointercancel', function () {
+    pointerFiring = false;
+    pointerSteering = false;
   });
 
   window.addEventListener('pointerup', function () {
     pointerFiring = false;
+    pointerSteering = false;
   });
 
   window.addEventListener('pointercancel', function () {
     pointerFiring = false;
+    pointerSteering = false;
   });
 
   audioToggleBtn.addEventListener('click', function (e) {
