@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Void Runner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700;800&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="fxLayer" aria-hidden="true">
+    <div class="grid-glow"></div>
+    <div class="scanlines"></div>
+    <div class="vignette"></div>
+  </div>
+
+  <div id="ui">
+    <header id="topHud">
+      <div class="hud-chip">
+        <span class="label">SCORE</span>
+        <span id="scoreDisplay" class="value hidden">0</span>
+      </div>
+      <div class="hud-chip">
+        <span class="label">STATUS</span>
+        <span id="statusText" class="value">READY</span>
+      </div>
+      <button id="audioToggle" type="button" class="hud-button" aria-pressed="true">SOUND: ON</button>
+    </header>
+
+    <section id="startScreen" class="panel">
+      <h1>VOID RUNNER</h1>
+      <p class="subtitle">NEON SURVIVAL PROTOCOL</p>
+      <p>Dodge incoming asteroids as velocity escalates.</p>
+      <p>Move with WASD or Arrow keys</p>
+      <p>Press any key or click to launch</p>
+    </section>
+
+    <section id="gameOverScreen" class="panel hidden">
+      <h1>GAME OVER</h1>
+      <p class="finalScore">Final Score: <span id="finalScore">0</span></p>
+      <p>Press any key or click to redeploy</p>
+    </section>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>

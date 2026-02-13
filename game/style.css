@@ -1,0 +1,288 @@
+:root {
+  --bg-0: #03040c;
+  --bg-1: #0a1230;
+  --bg-2: #060a18;
+  --neon-cyan: #3af4ff;
+  --neon-blue: #5da5ff;
+  --neon-lime: #8eff87;
+  --warning: #ff6d6d;
+  --panel-bg: rgba(8, 13, 28, 0.78);
+  --panel-border: rgba(82, 169, 255, 0.46);
+  --panel-shadow: rgba(26, 187, 255, 0.3);
+  --text-main: #dffbff;
+  --text-soft: #8fb8cf;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: radial-gradient(circle at 15% 10%, #132456 0%, var(--bg-0) 42%),
+    radial-gradient(circle at 85% 85%, #142739 0%, transparent 55%),
+    var(--bg-0);
+  color: var(--text-main);
+  font-family: 'Rajdhani', 'Trebuchet MS', sans-serif;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(115deg, rgba(20, 56, 117, 0.35), rgba(1, 2, 8, 0.15) 55%, rgba(13, 42, 52, 0.3));
+  mix-blend-mode: screen;
+  pointer-events: none;
+  z-index: 0;
+}
+
+#gameCanvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 1;
+}
+
+#fxLayer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.grid-glow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 83%, rgba(38, 113, 224, 0.22), transparent 55%),
+    linear-gradient(to top, rgba(28, 64, 150, 0.24), transparent 45%);
+}
+
+.scanlines {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(194, 242, 255, 0.05) 0,
+    rgba(194, 242, 255, 0.05) 1px,
+    transparent 2px,
+    transparent 5px
+  );
+  mix-blend-mode: screen;
+  opacity: 0.42;
+  animation: scanMove 8s linear infinite;
+}
+
+.vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, transparent 40%, rgba(0, 0, 0, 0.66) 100%);
+}
+
+#ui {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+#ui > * {
+  pointer-events: auto;
+}
+
+#topHud {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hud-chip {
+  min-width: 158px;
+  padding: 9px 14px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--panel-border);
+  background: linear-gradient(150deg, rgba(16, 33, 68, 0.9), rgba(8, 12, 24, 0.75));
+  box-shadow:
+    0 0 0 1px rgba(84, 216, 255, 0.2) inset,
+    0 0 20px rgba(10, 95, 189, 0.25),
+    0 10px 28px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(8px);
+}
+
+.hud-chip .label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 2.3px;
+  color: var(--text-soft);
+}
+
+.hud-chip .value {
+  display: block;
+  margin-top: 1px;
+  font-family: 'Oxanium', 'Rajdhani', sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 12px rgba(58, 244, 255, 0.75);
+}
+
+#statusText {
+  color: var(--neon-lime);
+  text-shadow: 0 0 10px rgba(142, 255, 135, 0.62);
+}
+
+.hud-button {
+  border: 1px solid rgba(142, 255, 135, 0.62);
+  border-radius: 10px;
+  background: linear-gradient(165deg, rgba(8, 24, 20, 0.95), rgba(5, 10, 16, 0.85));
+  color: #d6ffe3;
+  font-family: 'Oxanium', 'Rajdhani', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  padding: 12px 16px;
+  cursor: pointer;
+  box-shadow: 0 0 16px rgba(96, 243, 122, 0.2), 0 0 0 1px rgba(142, 255, 135, 0.3) inset;
+  transition: transform 120ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.hud-button:hover,
+.hud-button:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 0 22px rgba(120, 255, 131, 0.35), 0 0 0 1px rgba(142, 255, 135, 0.42) inset;
+  outline: none;
+}
+
+.hud-button[aria-pressed='false'] {
+  border-color: rgba(255, 109, 109, 0.6);
+  color: #ffd0d0;
+  box-shadow: 0 0 12px rgba(255, 109, 109, 0.2), 0 0 0 1px rgba(255, 109, 109, 0.22) inset;
+}
+
+.panel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(620px, calc(100% - 34px));
+  transform: translate(-50%, -50%);
+  text-align: center;
+  padding: 36px 34px;
+  border-radius: 18px;
+  border: 1px solid var(--panel-border);
+  background: linear-gradient(160deg, rgba(11, 22, 50, 0.9), rgba(5, 10, 20, 0.86));
+  box-shadow:
+    0 0 0 1px rgba(120, 214, 255, 0.2) inset,
+    0 12px 32px rgba(0, 0, 0, 0.45),
+    0 0 28px var(--panel-shadow);
+  backdrop-filter: blur(10px);
+  animation: panelBoot 450ms ease;
+  cursor: pointer;
+}
+
+.panel h1 {
+  margin: 0 0 8px;
+  font-family: 'Oxanium', 'Rajdhani', sans-serif;
+  font-size: clamp(38px, 8vw, 66px);
+  font-weight: 800;
+  letter-spacing: 5px;
+  color: #f5fcff;
+  text-shadow:
+    0 0 15px rgba(58, 244, 255, 0.55),
+    0 0 35px rgba(18, 142, 255, 0.28);
+}
+
+.panel .subtitle {
+  margin-top: 4px;
+  margin-bottom: 18px;
+  font-size: 15px;
+  letter-spacing: 2.8px;
+  color: var(--neon-blue);
+  text-shadow: 0 0 10px rgba(93, 165, 255, 0.35);
+}
+
+.panel p {
+  margin: 8px 0;
+  font-size: clamp(17px, 2.8vw, 23px);
+  color: #c0e8ff;
+}
+
+#gameOverScreen h1 {
+  color: #ffe6e6;
+  text-shadow:
+    0 0 16px rgba(255, 109, 109, 0.62),
+    0 0 34px rgba(255, 76, 76, 0.26);
+}
+
+.finalScore {
+  font-family: 'Oxanium', 'Rajdhani', sans-serif;
+  font-size: clamp(24px, 4.2vw, 36px);
+  color: #fff5d7;
+  text-shadow: 0 0 12px rgba(255, 212, 120, 0.55);
+}
+
+.hidden {
+  display: none !important;
+}
+
+@keyframes scanMove {
+  from {
+    transform: translateY(-8px);
+  }
+  to {
+    transform: translateY(8px);
+  }
+}
+
+@keyframes panelBoot {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -52%) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@media (max-width: 880px) {
+  #topHud {
+    width: calc(100% - 20px);
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 9px;
+  }
+
+  .hud-chip {
+    min-width: 135px;
+    flex: 1 1 130px;
+  }
+
+  .hud-button {
+    width: 100%;
+    max-width: 280px;
+  }
+}
+
+@media (max-width: 560px) {
+  .panel {
+    padding: 28px 20px;
+  }
+
+  .panel h1 {
+    letter-spacing: 3px;
+  }
+
+  .panel p {
+    font-size: 18px;
+  }
+}
