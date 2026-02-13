@@ -1,43 +1,111 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Void Runner: Hyper</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Void Runner - Enhanced Edition</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Audiowide&family=Michroma&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <canvas id="gameCanvas"></canvas>
-    
-    <!-- CRT Overlay -->
-    <div id="fxLayer"></div>
+  <canvas id="gameCanvas"></canvas>
 
-    <div id="ui">
-        <header>
-            <div class="hud-panel"><div><span class="label">SCORE</span><span id="scoreDisplay" class="value">0</span></div></div>
-            <div class="hud-panel"><div><span class="label">WEAPON</span><span id="weaponDisplay" class="value">BLASTER</span></div></div>
-            <div class="hud-panel"><div><span class="label">HEAT</span><span id="heatDisplay" class="value">0%</span></div></div>
-            <div class="hud-panel"><div><span class="label">STATUS</span><span id="statusText" class="value">READY</span></div></div>
-            <div style="align-self:center;"><button id="audioToggle">SOUND: ON</button></div>
-        </header>
+  <div id="fxLayer" aria-hidden="true">
+    <div class="grid-glow"></div>
+    <div class="scanlines"></div>
+    <div class="vignette"></div>
+    <div class="chromatic"></div>
+  </div>
 
-        <section id="startScreen" class="modal">
-            <h1>VOID RUNNER</h1>
-            <p class="subtitle">HYPER EDITION</p>
-            <p>Procedural Graphics · Physics · Synth Audio</p>
-            <p style="color:#aaa; margin-top:30px;">[ CLICK OR PRESS SPACE TO ENGAGE ]</p>
-        </section>
+  <div id="ui">
+    <header id="topHud">
+      <div class="hud-chip score-chip">
+        <span class="label">SCORE</span>
+        <span id="scoreDisplay" class="value hidden">0</span>
+        <div class="chip-glow"></div>
+      </div>
+      <div class="hud-chip weapon-chip">
+        <span class="label">WEAPON SYSTEM</span>
+        <div class="weapon-info">
+          <span id="weaponDisplay" class="value">BLASTER MK-II</span>
+          <div id="weaponIcon" class="weapon-icon">⚡</div>
+        </div>
+        <div class="chip-glow"></div>
+      </div>
+      <div class="hud-chip heat-chip">
+        <span class="label">HEAT</span>
+        <div class="heat-bar-container">
+          <div id="heatBar" class="heat-bar"></div>
+        </div>
+        <span id="heatDisplay" class="value">0%</span>
+        <div class="chip-glow"></div>
+      </div>
+      <div class="hud-chip combo-chip">
+        <span class="label">COMBO</span>
+        <span id="comboDisplay" class="value">x1</span>
+        <div class="chip-glow"></div>
+      </div>
+      <div class="hud-chip">
+        <span class="label">STATUS</span>
+        <span id="statusText" class="value">READY</span>
+        <div class="chip-glow"></div>
+      </div>
+      <button id="audioToggle" type="button" class="hud-button" aria-pressed="true">
+        <span>SOUND: ON</span>
+      </button>
+    </header>
 
-        <section id="gameOverScreen" class="modal hidden">
-            <h1>CRITICAL FAILURE</h1>
-            <p>SCORE: <span id="finalScore" style="color:#00f3ff; font-weight:bold;">0</span></p>
-            <p>KILLS: <span id="finalKills" style="color:#ff0055; font-weight:bold;">0</span></p>
-            <p style="margin-top:30px;">[ CLICK TO REBOOT SYSTEM ]</p>
-        </section>
+    <section id="startScreen" class="panel">
+      <h1>VOID RUNNER</h1>
+      <p class="subtitle">⚡ ENHANCED COMBAT PROTOCOL ⚡</p>
+      <div class="features">
+        <div class="feature">🎯 6 DEVASTATING WEAPONS</div>
+        <div class="feature">💥 ADVANCED PARTICLE EFFECTS</div>
+        <div class="feature">🌟 COMBO MULTIPLIER SYSTEM</div>
+      </div>
+      <p class="instruction">Annihilate incoming asteroids before breach</p>
+      <div class="controls-grid">
+        <div class="control-item">
+          <span class="key">WASD</span>
+          <span class="desc">Movement</span>
+        </div>
+        <div class="control-item">
+          <span class="key">SPACE</span>
+          <span class="desc">Fire</span>
+        </div>
+        <div class="control-item">
+          <span class="key">MOUSE</span>
+          <span class="desc">Aim & Fire</span>
+        </div>
+      </div>
+      <p class="start-prompt">PRESS ANY KEY TO DEPLOY</p>
+    </section>
 
-        <div id="controlHint">WASD to Move · MOUSE/SPACE to Fire</div>
-    </div>
+    <section id="gameOverScreen" class="panel hidden">
+      <h1>MISSION TERMINATED</h1>
+      <p class="subtitle">COMBAT DATA UPLOADED</p>
+      <div class="stats-grid">
+        <div class="stat">
+          <span class="stat-label">FINAL SCORE</span>
+          <span id="finalScore" class="stat-value">0</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">TARGETS ELIMINATED</span>
+          <span id="finalKills" class="stat-value">0</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">MAX COMBO</span>
+          <span id="maxCombo" class="stat-value">x1</span>
+        </div>
+      </div>
+      <p class="start-prompt">PRESS ANY KEY TO REDEPLOY</p>
+    </section>
 
-    <script src="game.js"></script>
+    <div id="controlHint">WASD / ARROWS • MOVE  |  SPACE / HOLD CLICK • FIRE  |  COLLECT POWERUPS • UPGRADE</div>
+  </div>
+
+  <script src="game.js"></script>
 </body>
 </html>
