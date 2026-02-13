@@ -87,6 +87,13 @@
         <div class="feature">☄️ ELITE ASTEROID WAVES</div>
       </div>
       <p class="instruction">Annihilate incoming asteroids before breach</p>
+      <div class="mode-select">
+        <p class="mode-label">SELECT PILOT COUNT</p>
+        <div class="mode-buttons">
+          <button id="mode1Btn" class="mode-btn active" type="button" data-mode="1">1 PLAYER</button>
+          <button id="mode2Btn" class="mode-btn" type="button" data-mode="2">2 PLAYERS</button>
+        </div>
+      </div>
       <div class="controls-grid">
         <div class="control-item">
           <span class="key">P1 WASD</span>
@@ -96,11 +103,11 @@
           <span class="key">P1 SPACE</span>
           <span class="desc">Pilot One Fire</span>
         </div>
-        <div class="control-item">
+        <div class="control-item p2-only">
           <span class="key">P2 ARROWS</span>
           <span class="desc">Pilot Two Move</span>
         </div>
-        <div class="control-item">
+        <div class="control-item p2-only">
           <span class="key">P2 ENTER</span>
           <span class="desc">Pilot Two Fire</span>
         </div>
@@ -113,7 +120,8 @@
           <span class="desc">Share Shields/Lives</span>
         </div>
       </div>
-      <p class="start-prompt">PRESS ANY KEY TO DEPLOY</p>
+      <button id="deployButton" class="deploy-button" type="button">DEPLOY NOW</button>
+      <p class="start-prompt">TIP: PRESS 1 OR 2 TO SWITCH MODES, THEN ENTER TO DEPLOY</p>
     </section>
 
     <section id="gameOverScreen" class="panel hidden">
@@ -133,7 +141,7 @@
           <span id="maxCombo" class="stat-value">x1</span>
         </div>
       </div>
-      <p class="start-prompt">PRESS ANY KEY TO REDEPLOY</p>
+      <p class="start-prompt">PRESS ENTER TO REDEPLOY (PRESS 1 OR 2 TO SWITCH MODE)</p>
     </section>
 
     <div id="controlHint">P1: WASD + SPACE / MOUSE  |  P2: ARROWS + ENTER  |  SHIELD • COOLANT • OVERDRIVE</div>

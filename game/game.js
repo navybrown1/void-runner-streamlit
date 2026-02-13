@@ -29,7 +29,10 @@
         finalScore: document.getElementById('finalScore'),
         finalKills: document.getElementById('finalKills'),
         maxCombo: document.getElementById('maxCombo'),
-        audioBtn: document.getElementById('audioToggle')
+        audioBtn: document.getElementById('audioToggle'),
+        controlHint: document.getElementById('controlHint'),
+        deployBtn: document.getElementById('deployButton'),
+        modeBtns: Array.from(document.querySelectorAll('.mode-btn'))
     };
 
     // --- STATE ---
@@ -50,7 +53,8 @@
         shield: 0,
         teamLives: 6,
         overdriveTimer: 0,
-        lastShot: 0
+        lastShot: 0,
+        playerMode: 1
     };
 
     const input = {
@@ -65,6 +69,11 @@
             left: false, right: false, up: false, down: false,
             fire: false
         }
+    };
+
+    const CONTROL_HINTS = {
+        1: 'P1: WASD + SPACE / MOUSE  |  SHIELD • COOLANT • OVERDRIVE',
+        2: 'P1: WASD + SPACE / MOUSE  |  P2: ARROWS + ENTER  |  SHIELD • COOLANT • OVERDRIVE'
     };
 
     // --- WEAPON DEFINITIONS ---
@@ -1269,8 +1278,11 @@
         overlays: [],
         starfield: null,
         
-        clear() {
-            this.players = [new Player(0), new Player(1)];
+        clear(playerMode = state.playerMode) {
+            this.players = [new Player(0)];
+            if(playerMode === 2) {
+                this.players.push(new Player(1));
+            }
             this.bullets = [];
             this.enemyBullets = [];
             this.enemies = [];
@@ -1551,17 +1563,26 @@
             const p2 = Entities.players[1];
             const heat1 = p1 ? Math.floor(p1.heat) : 0;
             const heat2 = p2 ? Math.floor(p2.heat) : 0;
-            const heatPercent = Math.floor((heat1 + heat2) / 2);
-            ui.heat.innerText = `P1 ${heat1}% | P2 ${heat2}%`;
+            const heatPercent = state.playerMode === 2 ? Math.floor((heat1 + heat2) / 2) : heat1;
+            ui.heat.innerText = state.playerMode === 2
+                ? `P1 ${heat1}% | P2 ${heat2}%`
+                : `P1 ${heat1}%`;
             ui.heatBar.style.width = heatPercent + '%';
 
             const alivePlayers = Entities.alivePlayers();
             if(alivePlayers.length > 0) {
-                ui.weapon.innerText = `P1 ${WEAPONS[p1.weapon].icon} · P2 ${WEAPONS[p2.weapon].icon}`;
-                ui.weaponIcon.innerText = alivePlayers.length === 2 ? '⚔' : '⚡';
-                ui.weaponIcon.style.filter = alivePlayers.length === 2
-                    ? 'drop-shadow(0 0 10px #9bffe4)'
-                    : 'drop-shadow(0 0 8px #ff7ee9)';
+                if(state.playerMode === 2 && p1 && p2) {
+                    ui.weapon.innerText = `P1 ${WEAPONS[p1.weapon].icon} · P2 ${WEAPONS[p2.weapon].icon}`;
+                    ui.weaponIcon.innerText = alivePlayers.length === 2 ? '⚔' : '⚡';
+                    ui.weaponIcon.style.filter = alivePlayers.length === 2
+                        ? 'drop-shadow(0 0 10px #9bffe4)'
+                        : 'drop-shadow(0 0 8px #ff7ee9)';
+                } else if(p1) {
+                    const wep = WEAPONS[p1.weapon];
+                    ui.weapon.innerText = wep.name;
+                    ui.weaponIcon.innerText = wep.icon;
+                    ui.weaponIcon.style.filter = `drop-shadow(0 0 8px ${wep.color})`;
+                }
             }
             
             if((p1 && p1.overheated) || (p2 && p2.overheated)) {
@@ -1686,10 +1707,44 @@
         }
     }
 
-    function startGame() {
+    function setPlayerMode(mode) {
+        state.playerMode = mode === 2 ? 2 : 1;
+        document.body.classList.toggle('single-player', state.playerMode === 1);
+        if(ui.controlHint) {
+            ui.controlHint.innerText = CONTROL_HINTS[state.playerMode];
+        }
+        ui.modeBtns.forEach(btn => {
+            const buttonMode = Number(btn.dataset.mode || 1);
+            btn.classList.toggle('active', buttonMode === state.playerMode);
+        });
+    }
+
+    function resetInput() {
+        input.p1.left = false;
+        input.p1.right = false;
+        input.p1.up = false;
+        input.p1.down = false;
+        input.p1.fire = false;
+        input.p1.x = 0;
+        input.p1.y = 0;
+        input.p1.mouse.down = false;
+        input.p1.mouse.active = false;
+
+        input.p2.left = false;
+        input.p2.right = false;
+        input.p2.up = false;
+        input.p2.down = false;
+        input.p2.fire = false;
+        input.p2.x = 0;
+        input.p2.y = 0;
+    }
+
+    function startGame(mode = state.playerMode) {
         if(state.running) return;
+        setPlayerMode(mode);
         Audio.init();
-        Entities.clear();
+        Entities.clear(state.playerMode);
+        resetInput();
         state.running = true;
         state.gameOver = false;
         state.score = 0;
@@ -1699,7 +1754,7 @@
         state.comboTimer = 0;
         state.wave = 1;
         state.shield = 4;
-        state.teamLives = 6;
+        state.teamLives = state.playerMode === 2 ? 6 : 8;
         state.overdriveTimer = 0;
         lastTime = performance.now();
         spawnTimer = 0;
@@ -1713,13 +1768,23 @@
         ui.kills.innerText = '0';
         ui.wave.innerText = '1';
         ui.combo.innerText = 'x1.0';
-        ui.shield.innerText = '4 | L6';
+        ui.shield.innerText = '4 | L' + state.teamLives;
         ui.shield.classList.add('active');
         ui.comboChip.classList.remove('hot');
-        
-        ui.weapon.innerText = 'P1 ⚡ · P2 ═';
-        ui.weaponIcon.innerText = '⚔';
-        ui.weaponIcon.style.filter = 'drop-shadow(0 0 10px #9bffe4)';
+
+        if(state.playerMode === 2) {
+            ui.weapon.innerText = 'P1 ⚡ · P2 ═';
+            ui.weaponIcon.innerText = '⚔';
+            ui.weaponIcon.style.filter = 'drop-shadow(0 0 10px #9bffe4)';
+            ui.heat.innerText = 'P1 0% | P2 0%';
+            ui.heatBar.style.width = '0%';
+        } else {
+            ui.weapon.innerText = WEAPONS.BLASTER.name;
+            ui.weaponIcon.innerText = WEAPONS.BLASTER.icon;
+            ui.weaponIcon.style.filter = 'drop-shadow(0 0 8px #00f3ff)';
+            ui.heat.innerText = 'P1 0%';
+            ui.heatBar.style.width = '0%';
+        }
     }
 
     // Input
@@ -1728,39 +1793,73 @@
     function refreshAxes() {
         input.p1.x = (input.p1.right ? 1 : 0) - (input.p1.left ? 1 : 0);
         input.p1.y = (input.p1.down ? 1 : 0) - (input.p1.up ? 1 : 0);
-        input.p2.x = (input.p2.right ? 1 : 0) - (input.p2.left ? 1 : 0);
-        input.p2.y = (input.p2.down ? 1 : 0) - (input.p2.up ? 1 : 0);
+        if(state.playerMode === 2) {
+            input.p2.x = (input.p2.right ? 1 : 0) - (input.p2.left ? 1 : 0);
+            input.p2.y = (input.p2.down ? 1 : 0) - (input.p2.up ? 1 : 0);
+        } else {
+            input.p2.x = 0;
+            input.p2.y = 0;
+        }
     }
-    
+
+    const GAME_KEYS = new Set([
+        'KeyW', 'KeyA', 'KeyS', 'KeyD',
+        'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+        'Enter', 'Numpad0', 'Slash'
+    ]);
+
     window.addEventListener('keydown', e => {
+        if(GAME_KEYS.has(e.code)) {
+            e.preventDefault();
+        }
+
+        if(!state.running) {
+            if(e.code === 'Digit1' || e.code === 'Numpad1') {
+                setPlayerMode(1);
+            } else if(e.code === 'Digit2' || e.code === 'Numpad2') {
+                setPlayerMode(2);
+            } else if(e.code === 'Enter' || e.code === 'Space') {
+                startGame();
+            }
+            return;
+        }
+
         if(e.code === 'KeyW') input.p1.up = true;
         if(e.code === 'KeyS') input.p1.down = true;
         if(e.code === 'KeyA') input.p1.left = true;
         if(e.code === 'KeyD') input.p1.right = true;
-        if(e.code === 'Space') { input.p1.fire = true; e.preventDefault(); }
+        if(e.code === 'Space') input.p1.fire = true;
 
-        if(e.code === 'ArrowUp') input.p2.up = true;
-        if(e.code === 'ArrowDown') input.p2.down = true;
-        if(e.code === 'ArrowLeft') input.p2.left = true;
-        if(e.code === 'ArrowRight') input.p2.right = true;
-        if(e.code === 'Enter' || e.code === 'Numpad0' || e.code === 'Slash') input.p2.fire = true;
+        if(state.playerMode === 2) {
+            if(e.code === 'ArrowUp') input.p2.up = true;
+            if(e.code === 'ArrowDown') input.p2.down = true;
+            if(e.code === 'ArrowLeft') input.p2.left = true;
+            if(e.code === 'ArrowRight') input.p2.right = true;
+            if(e.code === 'Enter' || e.code === 'Numpad0' || e.code === 'Slash') input.p2.fire = true;
+        }
 
         refreshAxes();
-        if(!state.running) startGame();
     });
     
     window.addEventListener('keyup', e => {
+        if(GAME_KEYS.has(e.code)) {
+            e.preventDefault();
+        }
+        if(!state.running) return;
+
         if(e.code === 'KeyW') input.p1.up = false;
         if(e.code === 'KeyS') input.p1.down = false;
         if(e.code === 'KeyA') input.p1.left = false;
         if(e.code === 'KeyD') input.p1.right = false;
         if(e.code === 'Space') input.p1.fire = false;
 
-        if(e.code === 'ArrowUp') input.p2.up = false;
-        if(e.code === 'ArrowDown') input.p2.down = false;
-        if(e.code === 'ArrowLeft') input.p2.left = false;
-        if(e.code === 'ArrowRight') input.p2.right = false;
-        if(e.code === 'Enter' || e.code === 'Numpad0' || e.code === 'Slash') input.p2.fire = false;
+        if(state.playerMode === 2) {
+            if(e.code === 'ArrowUp') input.p2.up = false;
+            if(e.code === 'ArrowDown') input.p2.down = false;
+            if(e.code === 'ArrowLeft') input.p2.left = false;
+            if(e.code === 'ArrowRight') input.p2.right = false;
+            if(e.code === 'Enter' || e.code === 'Numpad0' || e.code === 'Slash') input.p2.fire = false;
+        }
 
         refreshAxes();
     });
@@ -1773,8 +1872,8 @@
     
     canvas.addEventListener('pointerdown', e => {
         updatePointer(e);
+        if(!state.running) return;
         input.p1.mouse.down = true;
-        if(!state.running) startGame();
     });
     canvas.addEventListener('pointermove', updatePointer);
     canvas.addEventListener('pointerup', () => input.p1.mouse.down = false);
@@ -1789,8 +1888,21 @@
         ui.audioBtn.setAttribute('aria-pressed', Audio.enabled);
     });
 
+    ui.modeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            setPlayerMode(Number(btn.dataset.mode || 1));
+        });
+    });
+
+    if(ui.deployBtn) {
+        ui.deployBtn.addEventListener('click', () => {
+            startGame();
+        });
+    }
+
     // Boot
     Assets.init();
+    setPlayerMode(1);
     resize();
     requestAnimationFrame(loop);
 

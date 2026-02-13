@@ -20,20 +20,55 @@ def load_game_html() -> str:
     return html
 
 
-st.set_page_config(page_title="Void Runner", page_icon="🕹️", layout="wide")
+st.set_page_config(
+    page_title="Void Runner",
+    page_icon="🕹️",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
 st.markdown(
     """
     <style>
-      .block-container {padding-top: 0.6rem; padding-bottom: 0.4rem; max-width: 100%;}
-      footer {visibility: hidden;}
-      [data-testid="stHeader"] {height: 0;}
+      html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
+        background: #000;
+        height: 100%;
+        overflow: hidden;
+      }
+
+      header[data-testid="stHeader"],
+      [data-testid="stToolbar"],
+      [data-testid="stDecoration"],
+      [data-testid="stStatusWidget"],
+      footer {
+        display: none !important;
+      }
+
+      .block-container {
+        padding: 0 !important;
+        margin: 0 !important;
+        max-width: 100vw !important;
+        height: 100vh !important;
+      }
+
+      [data-testid="stVerticalBlock"] {
+        gap: 0 !important;
+      }
+
+      [data-testid="stComponentsV1Html"] {
+        width: 100vw !important;
+        height: 100vh !important;
+      }
+
+      [data-testid="stComponentsV1Html"] iframe {
+        display: block;
+        width: 100vw !important;
+        height: 100vh !important;
+        border: 0 !important;
+      }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-st.title("Void Runner")
-st.caption("Arcade survival game with visual FX and synthesized audio")
-
-components.html(load_game_html(), height=960, scrolling=False)
+components.html(load_game_html(), height=1000, scrolling=False)

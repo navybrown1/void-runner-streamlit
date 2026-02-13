@@ -446,7 +446,7 @@ body::before {
     0 0 60px var(--panel-shadow);
   backdrop-filter: blur(15px);
   animation: panelBoot 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
-  cursor: pointer;
+  cursor: default;
   overflow: hidden;
 }
 
@@ -605,6 +605,84 @@ body::before {
   margin: 20px 0;
 }
 
+.mode-select {
+  margin: 18px auto 10px;
+  max-width: 520px;
+}
+
+.mode-label {
+  margin: 0 0 10px;
+  font-family: 'Audiowide', monospace;
+  font-size: 12px;
+  letter-spacing: 2.2px;
+  color: var(--text-soft);
+}
+
+.mode-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.mode-btn {
+  appearance: none;
+  border: 1.5px solid rgba(77, 158, 255, 0.45);
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(7, 14, 28, 0.92), rgba(3, 8, 15, 0.88));
+  color: #bdefff;
+  font-family: 'Audiowide', 'Orbitron', monospace;
+  font-size: 14px;
+  letter-spacing: 1.8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  box-shadow: 0 0 0 1px rgba(0, 243, 255, 0.2) inset;
+}
+
+.mode-btn:hover,
+.mode-btn:focus-visible {
+  border-color: var(--neon-cyan);
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 16px rgba(0, 243, 255, 0.35),
+    0 0 0 1px rgba(0, 243, 255, 0.35) inset;
+}
+
+.mode-btn.active {
+  border-color: var(--neon-lime);
+  color: #e7ffe0;
+  box-shadow:
+    0 0 18px rgba(127, 255, 109, 0.32),
+    0 0 0 1px rgba(127, 255, 109, 0.45) inset;
+}
+
+.deploy-button {
+  appearance: none;
+  margin-top: 16px;
+  border: 1.6px solid rgba(127, 255, 109, 0.8);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(8, 34, 20, 0.95), rgba(6, 18, 12, 0.9));
+  color: #dbffd4;
+  font-family: 'Audiowide', 'Orbitron', monospace;
+  font-size: clamp(15px, 2vw, 18px);
+  letter-spacing: 2.4px;
+  padding: 13px 22px;
+  cursor: pointer;
+  box-shadow:
+    0 0 22px rgba(127, 255, 109, 0.2),
+    0 0 0 1px rgba(127, 255, 109, 0.32) inset;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.deploy-button:hover,
+.deploy-button:focus-visible {
+  transform: translateY(-2px);
+  border-color: #b2ff82;
+  box-shadow:
+    0 0 28px rgba(127, 255, 109, 0.33),
+    0 0 0 1px rgba(127, 255, 109, 0.5) inset;
+}
+
 .start-prompt {
   margin-top: 30px;
   font-family: 'Audiowide', monospace;
@@ -672,6 +750,10 @@ body::before {
   animation: hintFade 3s ease-in-out infinite alternate;
 }
 
+body.single-player .p2-only {
+  display: none;
+}
+
 @keyframes hintFade {
   from { opacity: 0.5; }
   to { opacity: 1; }
@@ -707,6 +789,10 @@ body::before {
   .controls-grid {
     grid-template-columns: 1fr;
     gap: 10px;
+  }
+
+  .mode-buttons {
+    grid-template-columns: 1fr;
   }
 }
 
