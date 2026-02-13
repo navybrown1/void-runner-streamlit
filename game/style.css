@@ -634,9 +634,10 @@ body::before {
   font-size: 14px;
   letter-spacing: 1.8px;
   padding: 12px 14px;
-  cursor: pointer;
+  cursor: default;
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
   box-shadow: 0 0 0 1px rgba(0, 243, 255, 0.2) inset;
+  pointer-events: none;
 }
 
 .mode-btn:hover,
@@ -667,11 +668,12 @@ body::before {
   font-size: clamp(15px, 2vw, 18px);
   letter-spacing: 2.4px;
   padding: 13px 22px;
-  cursor: pointer;
+  cursor: default;
   box-shadow:
     0 0 22px rgba(127, 255, 109, 0.2),
     0 0 0 1px rgba(127, 255, 109, 0.32) inset;
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  pointer-events: none;
 }
 
 .deploy-button:hover,
@@ -752,6 +754,11 @@ body::before {
 
 body.single-player .p2-only {
   display: none;
+}
+
+#audioToggle {
+  pointer-events: none;
+  cursor: default;
 }
 
 @keyframes hintFade {
