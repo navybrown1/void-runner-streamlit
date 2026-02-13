@@ -1,43 +1,43 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Void Runner Redux</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;700;800&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Void Runner: Hyper</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <canvas id="gameCanvas"></canvas>
-  <div id="fxLayer"><div class="scanlines"></div></div>
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- CRT Overlay -->
+    <div id="fxLayer"></div>
 
-  <div id="ui">
-    <header id="topHud">
-      <div class="hud-chip"><span class="label">SCORE</span><span id="scoreDisplay" class="value hidden">0</span></div>
-      <div class="hud-chip weapon-chip"><span class="label">WEAPON</span><span id="weaponDisplay" class="value">BLASTER</span></div>
-      <div class="hud-chip"><span class="label">HEAT</span><span id="heatDisplay" class="value">0%</span></div>
-      <div class="hud-chip"><span class="label">STATUS</span><span id="statusText" class="value">READY</span></div>
-      <button id="audioToggle">SOUND: ON</button>
-    </header>
+    <div id="ui">
+        <header>
+            <div class="hud-panel"><div><span class="label">SCORE</span><span id="scoreDisplay" class="value">0</span></div></div>
+            <div class="hud-panel"><div><span class="label">WEAPON</span><span id="weaponDisplay" class="value">BLASTER</span></div></div>
+            <div class="hud-panel"><div><span class="label">HEAT</span><span id="heatDisplay" class="value">0%</span></div></div>
+            <div class="hud-panel"><div><span class="label">STATUS</span><span id="statusText" class="value">READY</span></div></div>
+            <div style="align-self:center;"><button id="audioToggle">SOUND: ON</button></div>
+        </header>
 
-    <section id="startScreen" class="panel">
-      <h1>VOID RUNNER</h1>
-      <p class="subtitle">HYPER EDITION</p>
-      <p>Destroy Asteroids & Interceptors.<br>Collect Powerups to switch weapons.</p>
-      <p>CLICK TO START</p>
-    </section>
+        <section id="startScreen" class="modal">
+            <h1>VOID RUNNER</h1>
+            <p class="subtitle">HYPER EDITION</p>
+            <p>Procedural Graphics · Physics · Synth Audio</p>
+            <p style="color:#aaa; margin-top:30px;">[ CLICK OR PRESS SPACE TO ENGAGE ]</p>
+        </section>
 
-    <section id="gameOverScreen" class="panel hidden">
-      <h1>CRITICAL FAILURE</h1>
-      <p class="finalScore">SCORE: <span id="finalScore">0</span></p>
-      <p class="finalKills">KILLS: <span id="finalKills">0</span></p>
-      <p>CLICK TO REBOOT SYSTEM</p>
-    </section>
+        <section id="gameOverScreen" class="modal hidden">
+            <h1>CRITICAL FAILURE</h1>
+            <p>SCORE: <span id="finalScore" style="color:#00f3ff; font-weight:bold;">0</span></p>
+            <p>KILLS: <span id="finalKills" style="color:#ff0055; font-weight:bold;">0</span></p>
+            <p style="margin-top:30px;">[ CLICK TO REBOOT SYSTEM ]</p>
+        </section>
 
-    <div id="controlHint">WASD / ARROWS to Move · SPACE to Shoot</div>
-  </div>
-  <script src="game.js"></script>
+        <div id="controlHint">WASD to Move · MOUSE/SPACE to Fire</div>
+    </div>
+
+    <script src="game.js"></script>
 </body>
 </html>
