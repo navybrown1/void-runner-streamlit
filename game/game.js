@@ -14,11 +14,15 @@
     // UI Elements
     const ui = {
         score: document.getElementById('scoreDisplay'),
+        kills: document.getElementById('killsDisplay'),
+        wave: document.getElementById('waveDisplay'),
         weapon: document.getElementById('weaponDisplay'),
         weaponIcon: document.getElementById('weaponIcon'),
         heat: document.getElementById('heatDisplay'),
         heatBar: document.getElementById('heatBar'),
         combo: document.getElementById('comboDisplay'),
+        comboChip: document.querySelector('.combo-chip'),
+        shield: document.getElementById('shieldDisplay'),
         status: document.getElementById('statusText'),
         start: document.getElementById('startScreen'),
         over: document.getElementById('gameOverScreen'),
@@ -42,6 +46,9 @@
         combo: 1,
         comboTimer: 0,
         maxCombo: 1,
+        wave: 1,
+        shield: 0,
+        overdriveTimer: 0,
         lastShot: 0
     };
 
@@ -91,6 +98,12 @@
             heat: 35,
             color: '#b537ff'
         }
+    };
+
+    const UTILITY_POWERUPS = {
+        SHIELD: { icon: '🛡', color: '#6ad8ff', label: 'SHIELD CHARGE' },
+        COOLANT: { icon: '❄', color: '#88ffd8', label: 'THERMAL VENT' },
+        OVERDRIVE: { icon: '🔥', color: '#ffb25f', label: 'OVERDRIVE' }
     };
 
     // --- ASSET GENERATOR (Enhanced) ---
@@ -387,6 +400,20 @@
             combo: (mult) => {
                 const freq = 400 + (mult * 50);
                 Audio.playTone(freq, 'sine', 0.1, 0.08);
+            },
+            enemyShot: () => Audio.playTone(240, 'square', 0.1, 0.1, 140),
+            droneExplode: () => {
+                Audio.playNoise(0.28, 0.25, 1200);
+                Audio.playTone(320, 'triangle', 0.14, 0.1, 110);
+            },
+            shieldAbsorb: () => Audio.playTone(720, 'triangle', 0.11, 0.13, 420),
+            utilityPickup: () => {
+                Audio.playTone(700, 'sine', 0.1, 0.11);
+                setTimeout(() => Audio.playTone(1050, 'triangle', 0.12, 0.1), 70);
+            },
+            overdriveStart: () => {
+                Audio.playTone(300, 'sawtooth', 0.16, 0.14, 700);
+                setTimeout(() => Audio.playTone(600, 'sine', 0.2, 0.11), 90);
             }
         }
     };
@@ -465,7 +492,7 @@
             this.hp = 100;
         }
         update(dt) {
-            const speed = 450;
+            const speed = state.overdriveTimer > 0 ? 540 : 450;
             let tx = 0, ty = 0;
             
             if(input.x) tx = input.x * speed;
@@ -491,13 +518,14 @@
             this.tilt = this.vx / speed * 0.3;
 
             // Heat management
-            this.heat = Math.max(0, this.heat - 35*dt);
+            this.heat = Math.max(0, this.heat - (state.overdriveTimer > 0 ? 55 : 35)*dt);
             if(this.heat < 60) this.overheated = false;
 
             // Shooting
             if((input.fire || input.mouse.down) && !this.overheated) {
                 const wep = WEAPONS[this.weapon];
-                if(state.t - state.lastShot > wep.delay) {
+                const fireDelay = state.overdriveTimer > 0 ? wep.delay * 0.55 : wep.delay;
+                if(state.t - state.lastShot > fireDelay) {
                     this.shoot();
                 }
             }
@@ -520,7 +548,7 @@
         shoot() {
             state.lastShot = state.t;
             const wep = WEAPONS[this.weapon];
-            this.heat += wep.heat;
+            this.heat += wep.heat * (state.overdriveTimer > 0 ? 0.62 : 1);
             state.shake += this.weapon === 'RAILGUN' ? 8 : (this.weapon === 'PLASMA' ? 6 : 3);
             
             if(this.heat >= 100) {
@@ -531,7 +559,8 @@
             const muzzle = { x: this.x, y: this.y - 30 };
             
             // Muzzle flash
-            for(let i=0; i<5; i++) {
+            const flashCount = state.overdriveTimer > 0 ? 9 : 5;
+            for(let i=0; i<flashCount; i++) {
                 Entities.particles.push(new Particle(muzzle.x, muzzle.y, {
                     color: wep.color,
                     speed: 120,
@@ -545,6 +574,10 @@
             switch(this.weapon) {
                 case 'BLASTER':
                     Entities.bullets.push(new Bullet(muzzle.x, muzzle.y, 0, -1100, 1, wep.color, 4));
+                    if(state.overdriveTimer > 0) {
+                        Entities.bullets.push(new Bullet(muzzle.x - 10, muzzle.y, -120, -1200, 0.8, wep.color, 3));
+                        Entities.bullets.push(new Bullet(muzzle.x + 10, muzzle.y, 120, -1200, 0.8, wep.color, 3));
+                    }
                     Audio.sfx.shoot();
                     break;
                     
@@ -589,6 +622,20 @@
             ctx.rotate(this.tilt);
             ctx.drawImage(Assets.cache.player, -80, -80);
             ctx.restore();
+
+            if(state.shield > 0) {
+                const pulse = 0.55 + Math.sin(state.t * 8) * 0.22;
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.strokeStyle = 'rgba(106, 216, 255, ' + pulse.toFixed(3) + ')';
+                ctx.lineWidth = 2.3;
+                ctx.shadowBlur = 18;
+                ctx.shadowColor = '#6ad8ff';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 38 + Math.sin(state.t * 5) * 2, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+                ctx.globalCompositeOperation = 'source-over';
+            }
         }
     }
 
@@ -726,6 +773,170 @@
         }
     }
 
+    class EnemyBolt extends Entity {
+        constructor(x, y, tx, ty) {
+            super(x, y);
+            const dx = tx - x;
+            const dy = ty - y;
+            const len = Math.max(1, Math.hypot(dx, dy));
+            const speed = 320 + Math.min(320, state.wave * 28);
+            this.vx = (dx / len) * speed;
+            this.vy = (dy / len) * speed;
+            this.r = 5;
+            this.life = 4;
+            this.color = '#ff6077';
+        }
+        update(dt) {
+            super.update(dt);
+            this.life -= dt;
+            if(this.life <= 0 || this.y > state.height + 80 || this.x < -80 || this.x > state.width + 80) {
+                this.dead = true;
+            }
+            if(Math.random() < 0.45) {
+                Entities.particles.push(new Particle(this.x, this.y, {
+                    size: 2.4,
+                    color: '#ff6d88',
+                    life: 0.22,
+                    speed: 18,
+                    mode: 'add',
+                    glow: true
+                }));
+            }
+        }
+        draw(ctx) {
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.shadowBlur = 14;
+            ctx.shadowColor = this.color;
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalCompositeOperation = 'source-over';
+        }
+    }
+
+    class Drone extends Entity {
+        constructor(x, y) {
+            super(x, y);
+            this.r = 22;
+            this.w = 48;
+            this.h = 26;
+            this.hp = 8 + Math.floor(state.wave * 0.8);
+            this.maxHp = this.hp;
+            this.vx = (Math.random() > 0.5 ? 1 : -1) * (100 + Math.random() * 90);
+            this.vy = 40 + Math.random() * 40;
+            this.sway = Math.random() * Math.PI * 2;
+            this.fireCd = 1.1 + Math.random() * 1.2;
+            this.flash = 0;
+        }
+        update(dt) {
+            this.sway += dt * 2.4;
+            this.x += this.vx * dt;
+            this.y += (this.vy + Math.sin(this.sway) * 30) * dt;
+
+            if(this.x < this.r || this.x > state.width - this.r) {
+                this.vx *= -1;
+                this.x = Math.max(this.r, Math.min(state.width - this.r, this.x));
+            }
+
+            this.fireCd -= dt;
+            if(this.fireCd <= 0 && !state.gameOver) {
+                const p = Entities.player;
+                Entities.enemyBullets.push(new EnemyBolt(this.x, this.y + 10, p.x, p.y));
+                Audio.sfx.enemyShot();
+                this.fireCd = Math.max(0.55, 1.4 - state.wave * 0.05) + Math.random() * 0.8;
+            }
+
+            this.flash = Math.max(0, this.flash - dt * 4);
+            if(this.y > state.height + 100) this.dead = true;
+        }
+        takeDamage(amt) {
+            this.hp -= amt;
+            this.flash = 1;
+            if(this.hp <= 0) {
+                this.dead = true;
+                state.comboTimer = 3.2;
+                state.combo = Math.min(state.combo + 0.35, 12);
+                state.maxCombo = Math.max(state.maxCombo, Math.floor(state.combo));
+                state.kills++;
+                state.score += 240 * state.combo;
+                state.shake += 8;
+                Audio.sfx.droneExplode();
+
+                if(Math.random() < 0.38) {
+                    const utility = Math.random();
+                    const utilType = utility < 0.34 ? 'SHIELD' : utility < 0.68 ? 'COOLANT' : 'OVERDRIVE';
+                    Entities.spawns.push(new Powerup(this.x, this.y, utilType, true));
+                }
+
+                for(let i=0; i<24; i++) {
+                    Entities.particles.push(new Particle(this.x, this.y, {
+                        color: i % 2 ? '#ff7488' : '#9acaff',
+                        size: Math.random() * 4 + 2,
+                        speed: 260,
+                        life: 0.9,
+                        drag: 0.9,
+                        mode: 'add',
+                        glow: true
+                    }));
+                }
+            } else {
+                Audio.sfx.hit();
+                for(let i=0; i<6; i++) {
+                    Entities.particles.push(new Particle(this.x, this.y, {
+                        color: '#8fb7de',
+                        size: 2.5,
+                        speed: 120,
+                        life: 0.45
+                    }));
+                }
+            }
+        }
+        draw(ctx) {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+
+            const glow = 0.35 + this.flash * 0.45;
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = `rgba(95, 205, 255, ${glow})`;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, this.w * 0.7, this.h * 0.75, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalCompositeOperation = 'source-over';
+
+            ctx.fillStyle = '#0d1d37';
+            ctx.strokeStyle = '#7ecbff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(-this.w * 0.56, 0);
+            ctx.lineTo(-this.w * 0.16, -this.h * 0.5);
+            ctx.lineTo(this.w * 0.16, -this.h * 0.5);
+            ctx.lineTo(this.w * 0.56, 0);
+            ctx.lineTo(this.w * 0.16, this.h * 0.5);
+            ctx.lineTo(-this.w * 0.16, this.h * 0.5);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#9fdfff';
+            ctx.beginPath();
+            ctx.arc(0, 0, 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            if(this.hp < this.maxHp) {
+                const w = 36;
+                const hpPct = Math.max(0, this.hp / this.maxHp);
+                ctx.fillStyle = 'rgba(20, 35, 50, 0.8)';
+                ctx.fillRect(-w / 2, -this.h - 10, w, 4);
+                ctx.fillStyle = hpPct < 0.4 ? '#ff5d5d' : '#6fe8ff';
+                ctx.fillRect(-w / 2, -this.h - 10, w * hpPct, 4);
+            }
+
+            ctx.restore();
+        }
+    }
+
     class Asteroid extends Entity {
         constructor(x, y, sizeClass, type = 'normal') {
             super(x, y);
@@ -769,9 +980,10 @@
                 Audio.sfx.combo(state.combo);
                 
                 // Spawn powerup chance
-                const chance = this.type === 'crystal' ? 0.15 : 0.08;
+                const chance = this.type === 'crystal' ? 0.2 : (this.type === 'metal' ? 0.16 : 0.09);
                 if(Math.random() < chance) {
-                    Entities.spawns.push(new Powerup(this.x, this.y));
+                    const forceUtility = Math.random() < (this.type === 'metal' ? 0.5 : 0.25);
+                    Entities.spawns.push(new Powerup(this.x, this.y, null, forceUtility));
                 }
             } else {
                 Audio.sfx.hit();
@@ -848,15 +1060,25 @@
     }
 
     class Powerup extends Entity {
-        constructor(x, y) {
+        constructor(x, y, utilityType = null, forceUtility = false) {
             super(x, y);
             this.vy = 80;
             this.r = 18;
-            
-            const weapons = Object.keys(WEAPONS);
-            this.type = weapons[Math.floor(Math.random() * weapons.length)];
-            this.color = WEAPONS[this.type].color;
-            this.icon = WEAPONS[this.type].icon;
+            this.isUtility = false;
+
+            const useUtility = forceUtility || Math.random() < 0.22;
+            if(useUtility) {
+                this.isUtility = true;
+                const utilKeys = Object.keys(UTILITY_POWERUPS);
+                this.type = utilityType || utilKeys[Math.floor(Math.random() * utilKeys.length)];
+                this.color = UTILITY_POWERUPS[this.type].color;
+                this.icon = UTILITY_POWERUPS[this.type].icon;
+            } else {
+                const weapons = Object.keys(WEAPONS);
+                this.type = weapons[Math.floor(Math.random() * weapons.length)];
+                this.color = WEAPONS[this.type].color;
+                this.icon = WEAPONS[this.type].icon;
+            }
             this.bobOffset = Math.random() * Math.PI * 2;
         }
         update(dt) {
@@ -965,6 +1187,7 @@
     const Entities = {
         player: null,
         bullets: [],
+        enemyBullets: [],
         enemies: [],
         particles: [],
         spawns: [],
@@ -974,6 +1197,7 @@
         clear() {
             this.player = new Player();
             this.bullets = [];
+            this.enemyBullets = [];
             this.enemies = [];
             this.particles = [];
             this.spawns = [];
@@ -985,6 +1209,7 @@
             this.starfield.update(dt);
             this.player.update(dt);
             this.bullets.forEach(e => e.update(dt));
+            this.enemyBullets.forEach(e => e.update(dt));
             this.enemies.forEach(e => e.update(dt));
             this.particles.forEach(e => e.update(dt));
             this.spawns.forEach(e => e.update(dt));
@@ -1018,27 +1243,78 @@
                 if(e.dead) continue;
                 const dist = Math.hypot(p.x - e.x, p.y - e.y);
                 if(dist < 35 + e.r) {
-                    state.gameOver = true;
-                    Audio.sfx.explode();
-                    ui.finalScore.innerText = Math.floor(state.score);
-                    ui.finalKills.innerText = state.kills;
-                    ui.maxCombo.innerText = 'x' + state.maxCombo;
-                    ui.start.classList.add('hidden');
-                    ui.score.classList.add('hidden');
-                    ui.over.classList.remove('hidden');
-                    state.running = false;
-                    
-                    // Death explosion
-                    for(let i=0; i<50; i++) {
-                        this.particles.push(new Particle(p.x, p.y, {
-                            color: Math.random()>0.5 ? '#00f3ff' : '#ff4757',
-                            size: Math.random()*6 + 2,
-                            speed: 300,
-                            life: 1.2,
-                            drag: 0.9,
-                            mode: 'add',
-                            glow: true
-                        }));
+                    if(state.shield > 0) {
+                        state.shield--;
+                        e.dead = true;
+                        state.shake += 10;
+                        Audio.sfx.shieldAbsorb();
+                        for(let i=0; i<25; i++) {
+                            this.particles.push(new Particle(p.x, p.y, {
+                                color: '#6ad8ff',
+                                size: Math.random()*3 + 2,
+                                speed: 260,
+                                life: 0.55,
+                                mode: 'add',
+                                glow: true
+                            }));
+                        }
+                    } else {
+                        state.gameOver = true;
+                        Audio.sfx.explode();
+                        ui.finalScore.innerText = Math.floor(state.score);
+                        ui.finalKills.innerText = state.kills;
+                        ui.maxCombo.innerText = 'x' + state.maxCombo;
+                        ui.start.classList.add('hidden');
+                        ui.score.classList.add('hidden');
+                        ui.over.classList.remove('hidden');
+                        state.running = false;
+
+                        // Death explosion
+                        for(let i=0; i<50; i++) {
+                            this.particles.push(new Particle(p.x, p.y, {
+                                color: Math.random()>0.5 ? '#00f3ff' : '#ff4757',
+                                size: Math.random()*6 + 2,
+                                speed: 300,
+                                life: 1.2,
+                                drag: 0.9,
+                                mode: 'add',
+                                glow: true
+                            }));
+                        }
+                        return;
+                    }
+                }
+            }
+
+            // Collision: Player vs Enemy Bullets
+            for(const eb of this.enemyBullets) {
+                if(eb.dead) continue;
+                if(Math.hypot(p.x - eb.x, p.y - eb.y) < 34 + eb.r) {
+                    eb.dead = true;
+                    if(state.shield > 0) {
+                        state.shield--;
+                        Audio.sfx.shieldAbsorb();
+                        for(let i=0; i<16; i++) {
+                            this.particles.push(new Particle(p.x, p.y, {
+                                color: '#7edfff',
+                                size: 2.4,
+                                speed: 220,
+                                life: 0.42,
+                                mode: 'add',
+                                glow: true
+                            }));
+                        }
+                    } else {
+                        state.gameOver = true;
+                        Audio.sfx.explode();
+                        ui.finalScore.innerText = Math.floor(state.score);
+                        ui.finalKills.innerText = state.kills;
+                        ui.maxCombo.innerText = 'x' + state.maxCombo;
+                        ui.start.classList.add('hidden');
+                        ui.score.classList.add('hidden');
+                        ui.over.classList.remove('hidden');
+                        state.running = false;
+                        return;
                     }
                 }
             }
@@ -1047,14 +1323,31 @@
             for(const pup of this.spawns) {
                 if(pup.dead) continue;
                 if(Math.hypot(p.x - pup.x, p.y - pup.y) < 35) {
-                    p.weapon = pup.type;
-                    const wep = WEAPONS[pup.type];
-                    ui.weapon.innerText = wep.name;
-                    ui.weaponIcon.innerText = wep.icon;
-                    ui.weaponIcon.style.filter = `drop-shadow(0 0 8px ${wep.color})`;
-                    Audio.sfx.powerup();
+                    if(pup.isUtility) {
+                        if(pup.type === 'SHIELD') {
+                            state.shield = Math.min(5, state.shield + 1);
+                            ui.status.innerText = "SHIELD CHARGE +" + 1;
+                        } else if(pup.type === 'COOLANT') {
+                            p.heat = Math.max(0, p.heat - 45);
+                            ui.status.innerText = "THERMAL VENT ENGAGED";
+                        } else if(pup.type === 'OVERDRIVE') {
+                            state.overdriveTimer = 10;
+                            p.heat = Math.max(0, p.heat - 25);
+                            ui.status.innerText = "OVERDRIVE ONLINE";
+                            Audio.sfx.overdriveStart();
+                        }
+                        Audio.sfx.utilityPickup();
+                    } else {
+                        p.weapon = pup.type;
+                        const wep = WEAPONS[pup.type];
+                        ui.weapon.innerText = wep.name;
+                        ui.weaponIcon.innerText = wep.icon;
+                        ui.weaponIcon.style.filter = `drop-shadow(0 0 8px ${wep.color})`;
+                        Audio.sfx.powerup();
+                        ui.status.innerText = "WEAPON: " + wep.name;
+                    }
+
                     pup.dead = true;
-                    ui.status.innerText = "WEAPON: " + wep.name;
                     setTimeout(() => ui.status.innerText = "READY", 2500);
                     
                     // Pickup particles
@@ -1073,6 +1366,7 @@
 
             // Cleanup
             this.bullets = this.bullets.filter(e => !e.dead);
+            this.enemyBullets = this.enemyBullets.filter(e => !e.dead);
             this.enemies = this.enemies.filter(e => !e.dead);
             this.particles = this.particles.filter(e => !e.dead);
             this.spawns = this.spawns.filter(e => !e.dead);
@@ -1082,6 +1376,7 @@
             this.starfield.draw(ctx);
             this.spawns.forEach(e => e.draw(ctx));
             this.enemies.forEach(e => e.draw(ctx));
+            this.enemyBullets.forEach(e => e.draw(ctx));
             this.player.draw(ctx);
             this.bullets.forEach(e => e.draw(ctx));
             this.particles.forEach(e => e.draw(ctx));
@@ -1091,6 +1386,7 @@
     // --- MAIN LOOP ---
     let lastTime = 0;
     let spawnTimer = 0;
+    let droneSpawnTimer = 0;
 
     function loop(now) {
         requestAnimationFrame(loop);
@@ -1108,28 +1404,50 @@
         }
 
         if(state.running && !state.gameOver) {
+            state.wave = 1 + Math.floor(state.score / 2200);
+            if(state.overdriveTimer > 0) {
+                state.overdriveTimer = Math.max(0, state.overdriveTimer - dt);
+            }
+
             // Enemy spawning
             spawnTimer += dt;
-            const spawnRate = Math.max(0.4, 1.2 - state.score/6000);
+            const spawnRate = Math.max(0.22, 1.15 - state.score/7000 - state.wave * 0.03);
             if(spawnTimer > spawnRate) {
                 spawnTimer = 0;
                 
                 // Size distribution
                 const r = Math.random();
-                const size = r < 0.5 ? 1 : (r < 0.85 ? 2 : 3);
+                const size = r < 0.45 ? 1 : (r < 0.82 ? 2 : 3);
                 
                 // Type distribution
                 const tr = Math.random();
-                const type = tr < 0.6 ? 'normal' : (tr < 0.8 ? 'crystal' : 'metal');
+                const eliteChance = Math.min(0.22, state.wave * 0.015);
+                const type = tr < (0.6 - eliteChance) ? 'normal' : (tr < (0.8 - eliteChance * 0.4) ? 'crystal' : 'metal');
                 
                 Entities.enemies.push(new Asteroid(Math.random()*state.width, -80, size, type));
+            }
+
+            droneSpawnTimer += dt;
+            const droneRate = Math.max(2.2, 7.2 - state.wave * 0.3);
+            if(droneSpawnTimer > droneRate && state.score > 1200) {
+                droneSpawnTimer = 0;
+                if(Entities.enemies.filter(e => e instanceof Drone).length < 5) {
+                    const side = Math.random() < 0.5 ? -40 : state.width + 40;
+                    const y = 90 + Math.random() * (state.height * 0.3);
+                    Entities.enemies.push(new Drone(side, y));
+                }
             }
 
             Entities.update(dt);
             
             // Update UI
             ui.score.innerText = Math.floor(state.score);
-            ui.combo.innerText = 'x' + Math.floor(state.combo);
+            ui.kills.innerText = state.kills;
+            ui.wave.innerText = state.wave;
+            ui.combo.innerText = 'x' + state.combo.toFixed(1);
+            ui.comboChip.classList.toggle('hot', state.combo >= 4);
+            ui.shield.innerText = state.shield;
+            ui.shield.classList.toggle('active', state.shield > 0);
             
             const heatPercent = Math.floor(Entities.player.heat);
             ui.heat.innerText = heatPercent + "%";
@@ -1144,6 +1462,17 @@
             } else {
                 ui.heat.className = 'value';
                 ui.heatBar.className = 'heat-bar';
+            }
+
+            ui.status.classList.remove('overdrive', 'alert');
+            if(Entities.player.overheated) {
+                ui.status.innerText = "WEAPON OVERHEATED";
+                ui.status.classList.add('alert');
+            } else if(state.overdriveTimer > 0) {
+                ui.status.innerText = "OVERDRIVE " + state.overdriveTimer.toFixed(1) + "s";
+                ui.status.classList.add('overdrive');
+            } else {
+                ui.status.innerText = "WAVE " + state.wave + " CLEARANCE";
             }
         }
 
@@ -1167,6 +1496,26 @@
         }
 
         Entities.draw(ctx);
+
+        if(state.overdriveTimer > 0) {
+            const p = 0.12 + Math.sin(state.t * 14) * 0.04;
+            const og = ctx.createRadialGradient(
+                state.width * 0.5, state.height * 0.72, 40,
+                state.width * 0.5, state.height * 0.72, state.width * 0.65
+            );
+            og.addColorStop(0, `rgba(255, 164, 74, ${p.toFixed(3)})`);
+            og.addColorStop(1, 'rgba(255, 164, 74, 0)');
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = og;
+            ctx.fillRect(0, 0, state.width, state.height);
+            ctx.globalCompositeOperation = 'source-over';
+        }
+
+        if(state.combo >= 5) {
+            const cAlpha = Math.min(0.06, (state.combo - 4) * 0.012);
+            ctx.fillStyle = `rgba(255, 187, 73, ${cAlpha.toFixed(3)})`;
+            ctx.fillRect(0, 0, state.width, state.height);
+        }
         
         // Fullscreen flash overlays
         for(let i=Entities.overlays.length-1; i>=0; i--) {
@@ -1214,12 +1563,24 @@
         state.combo = 1;
         state.maxCombo = 1;
         state.comboTimer = 0;
+        state.wave = 1;
+        state.shield = 0;
+        state.overdriveTimer = 0;
         lastTime = performance.now();
+        spawnTimer = 0;
+        droneSpawnTimer = 0;
         
         ui.start.classList.add('hidden');
         ui.over.classList.add('hidden');
         ui.score.classList.remove('hidden');
         ui.status.innerText = "SYSTEMS ONLINE";
+        ui.status.classList.remove('overdrive', 'alert');
+        ui.kills.innerText = '0';
+        ui.wave.innerText = '1';
+        ui.combo.innerText = 'x1.0';
+        ui.shield.innerText = '0';
+        ui.shield.classList.remove('active');
+        ui.comboChip.classList.remove('hot');
         
         const wep = WEAPONS.BLASTER;
         ui.weapon.innerText = wep.name;

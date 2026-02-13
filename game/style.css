@@ -139,8 +139,11 @@ body::before {
   left: 50%;
   transform: translateX(-50%);
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
   gap: 14px;
+  width: min(1800px, calc(100% - 24px));
   animation: hudSlideIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -157,7 +160,7 @@ body::before {
 
 .hud-chip {
   position: relative;
-  min-width: 140px;
+  min-width: 130px;
   padding: 10px 16px 11px;
   border-radius: 14px;
   border: 1.5px solid var(--panel-border);
@@ -226,6 +229,16 @@ body::before {
 
 .weapon-chip {
   min-width: 240px;
+}
+
+#killsDisplay {
+  color: #c4fbff;
+  text-shadow: 0 0 12px rgba(99, 243, 255, 0.85), 0 0 24px rgba(0, 243, 255, 0.35);
+}
+
+#waveDisplay {
+  color: #ffe28b;
+  text-shadow: 0 0 12px rgba(255, 200, 104, 0.85), 0 0 22px rgba(255, 157, 43, 0.34);
 }
 
 .weapon-info {
@@ -323,9 +336,41 @@ body::before {
     0 0 20px rgba(127, 255, 109, 0.4);
 }
 
+.combo-chip.hot #comboDisplay {
+  color: #ffec87;
+  text-shadow:
+    0 0 12px rgba(255, 230, 122, 0.9),
+    0 0 28px rgba(255, 172, 46, 0.5);
+}
+
+#shieldDisplay {
+  color: #8ce6ff;
+  text-shadow: 0 0 12px rgba(110, 220, 255, 0.8), 0 0 20px rgba(110, 220, 255, 0.35);
+}
+
+#shieldDisplay.active {
+  color: #d4f7ff;
+  animation: shieldPulse 0.9s ease-in-out infinite;
+}
+
+@keyframes shieldPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
 #statusText {
   color: var(--neon-lime);
   text-shadow: 0 0 12px rgba(127, 255, 109, 0.7);
+}
+
+#statusText.overdrive {
+  color: #ffd073;
+  text-shadow: 0 0 14px rgba(255, 176, 74, 0.9), 0 0 28px rgba(255, 132, 29, 0.55);
+}
+
+#statusText.alert {
+  color: #ff6b6b;
+  text-shadow: 0 0 16px rgba(255, 83, 83, 0.95), 0 0 30px rgba(255, 32, 32, 0.5);
 }
 
 .hud-button {

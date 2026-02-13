@@ -26,6 +26,16 @@
         <span id="scoreDisplay" class="value hidden">0</span>
         <div class="chip-glow"></div>
       </div>
+      <div class="hud-chip">
+        <span class="label">KILLS</span>
+        <span id="killsDisplay" class="value">0</span>
+        <div class="chip-glow"></div>
+      </div>
+      <div class="hud-chip">
+        <span class="label">WAVE</span>
+        <span id="waveDisplay" class="value">1</span>
+        <div class="chip-glow"></div>
+      </div>
       <div class="hud-chip weapon-chip">
         <span class="label">WEAPON SYSTEM</span>
         <div class="weapon-info">
@@ -48,6 +58,11 @@
         <div class="chip-glow"></div>
       </div>
       <div class="hud-chip">
+        <span class="label">SHIELD</span>
+        <span id="shieldDisplay" class="value">0</span>
+        <div class="chip-glow"></div>
+      </div>
+      <div class="hud-chip">
         <span class="label">STATUS</span>
         <span id="statusText" class="value">READY</span>
         <div class="chip-glow"></div>
@@ -64,6 +79,9 @@
         <div class="feature">🎯 6 DEVASTATING WEAPONS</div>
         <div class="feature">💥 ADVANCED PARTICLE EFFECTS</div>
         <div class="feature">🌟 COMBO MULTIPLIER SYSTEM</div>
+        <div class="feature">🛡️ SHIELD + OVERDRIVE POWERUPS</div>
+        <div class="feature">🤖 DRONE INTERCEPTORS</div>
+        <div class="feature">☄️ ELITE ASTEROID WAVES</div>
       </div>
       <p class="instruction">Annihilate incoming asteroids before breach</p>
       <div class="controls-grid">
@@ -103,7 +121,7 @@
       <p class="start-prompt">PRESS ANY KEY TO REDEPLOY</p>
     </section>
 
-    <div id="controlHint">WASD / ARROWS • MOVE  |  SPACE / HOLD CLICK • FIRE  |  COLLECT POWERUPS • UPGRADE</div>
+    <div id="controlHint">WASD / ARROWS • MOVE  |  SPACE / HOLD CLICK • FIRE  |  SHIELD • COOLANT • OVERDRIVE</div>
   </div>
 
   <script src="game.js"></script>
