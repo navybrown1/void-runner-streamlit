@@ -1,153 +1,94 @@
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Orbitron:wght@900&display=swap');
+
 :root {
-  --neon-blue: #00eaff;
+  --neon-cyan: #00f3ff;
   --neon-pink: #ff0055;
-  --neon-yellow: #ffeb3b;
-  --bg-dark: #050510;
-  --glass: rgba(10, 20, 40, 0.85);
+  --hud-bg: rgba(0, 10, 20, 0.85);
 }
 
 body {
-  margin: 0;
-  overflow: hidden;
-  background: black;
+  margin: 0; overflow: hidden; background: #000;
   font-family: 'Rajdhani', sans-serif;
-  color: white;
-  user-select: none;
+  color: white; user-select: none;
 }
 
 #gameCanvas {
-  display: block;
+  display: block; width: 100vw; height: 100vh;
+}
+
+/* --- POST PROCESSING OVERLAY (CSS) --- */
+#fxLayer {
+  position: fixed; inset: 0; pointer-events: none; z-index: 10;
+  background: 
+    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+    linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  background-size: 100% 2px, 3px 100%;
 }
 
 #ui {
-  position: fixed;
-  top: 0; left: 0; width: 100%; height: 100%;
-  pointer-events: none;
+  position: fixed; inset: 0; pointer-events: none; z-index: 20;
 }
-
 #ui > * { pointer-events: auto; }
 
-/* HUD Top Bar */
+/* --- HUD --- */
 header {
-  display: flex;
-  justify-content: center;
-  gap: 20px;
-  padding: 20px;
+  display: flex; gap: 15px; padding: 20px;
+  position: absolute; width: 100%; justify-content: center;
+  box-sizing: border-box;
 }
 
-.hud-chip {
-  background: var(--glass);
-  border: 1px solid rgba(255,255,255,0.2);
-  border-radius: 8px;
-  padding: 10px 20px;
+.hud-panel {
+  background: var(--hud-bg);
+  border: 1px solid rgba(0, 243, 255, 0.3);
+  padding: 8px 20px;
+  transform: skewX(-15deg);
+  box-shadow: 0 0 10px rgba(0, 243, 255, 0.1);
+  min-width: 100px;
   text-align: center;
-  box-shadow: 0 0 15px rgba(0, 234, 255, 0.1);
-  backdrop-filter: blur(4px);
-  min-width: 120px;
 }
+
+.hud-panel > div { transform: skewX(15deg); } /* Un-skew text */
 
 .label {
-  display: block;
-  font-size: 10px;
-  letter-spacing: 2px;
-  color: #888;
-  margin-bottom: 4px;
+  display: block; font-size: 10px; color: #88a; letter-spacing: 2px;
 }
-
 .value {
-  font-family: 'Oxanium', monospace;
-  font-size: 24px;
-  font-weight: 800;
-  color: var(--neon-blue);
-  text-shadow: 0 0 10px var(--neon-blue);
+  font-family: 'Orbitron', sans-serif; font-size: 22px;
+  color: var(--neon-cyan); text-shadow: 0 0 8px var(--neon-cyan);
 }
+.critical { color: var(--neon-pink); text-shadow: 0 0 8px var(--neon-pink); }
 
-.weapon-chip .value {
-  color: var(--neon-yellow);
-  text-shadow: 0 0 10px var(--neon-yellow);
-}
-
-#audioToggle {
-  background: var(--glass);
-  border: 1px solid #444;
-  color: #888;
-  padding: 0 20px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-family: 'Oxanium', monospace;
+button#audioToggle {
+  background: transparent; border: 1px solid #444; color: #888;
+  padding: 5px 15px; cursor: pointer; font-family: inherit; font-weight: bold;
   transition: 0.2s;
 }
-#audioToggle:hover { border-color: white; color: white; }
+button#audioToggle:hover { border-color: white; color: white; }
 
-/* Screens (Start/Game Over) */
-.panel {
-  position: absolute;
-  top: 50%; left: 50%;
+/* --- MODALS --- */
+.modal {
+  position: absolute; top: 50%; left: 50%;
   transform: translate(-50%, -50%);
-  background: rgba(5, 10, 20, 0.95);
-  border: 2px solid var(--neon-blue);
-  padding: 40px 60px;
-  border-radius: 20px;
   text-align: center;
-  box-shadow: 0 0 50px rgba(0, 234, 255, 0.3);
-  animation: float 4s ease-in-out infinite;
+  background: rgba(0, 5, 10, 0.9);
+  padding: 40px 60px;
+  border: 2px solid var(--neon-cyan);
+  box-shadow: 0 0 40px rgba(0, 243, 255, 0.2);
+  backdrop-filter: blur(5px);
 }
 
-.panel h1 {
-  font-family: 'Oxanium', sans-serif;
-  font-size: 64px;
-  margin: 0;
-  background: linear-gradient(to bottom, #fff, var(--neon-blue));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 0 10px var(--neon-blue));
+.modal h1 {
+  font-family: 'Orbitron', sans-serif; font-size: 56px; margin: 0;
+  background: linear-gradient(to bottom, #fff, var(--neon-cyan));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 15px var(--neon-cyan));
 }
-
-.panel p {
-  font-size: 18px;
-  color: #ccc;
-  line-height: 1.6;
-}
-
-.subtitle {
-  color: var(--neon-pink) !important;
-  font-weight: bold;
-  letter-spacing: 4px;
-  margin-top: -10px;
-}
-
-.finalScore span {
-  color: var(--neon-yellow);
-  font-size: 32px;
-  font-weight: bold;
-}
+.subtitle { color: var(--neon-pink); font-size: 18px; letter-spacing: 5px; margin-top: -5px; }
 
 .hidden { display: none !important; }
 
 #controlHint {
-  position: absolute;
-  bottom: 20px;
-  width: 100%;
-  text-align: center;
-  color: rgba(255,255,255,0.4);
-  font-size: 12px;
-  letter-spacing: 2px;
-}
-
-/* VFX Overlay */
-#fxLayer {
-  position: fixed; inset: 0; pointer-events: none;
-  background: radial-gradient(circle, transparent 60%, rgba(0,0,0,0.8));
-  z-index: 10;
-}
-
-.scanlines {
-  position: absolute; inset: 0;
-  background: repeating-linear-gradient(to bottom, transparent 0, transparent 2px, rgba(0,0,0,0.3) 3px);
-  pointer-events: none;
-}
-
-@keyframes float {
-  0%, 100% { transform: translate(-50%, -50%); }
-  50% { transform: translate(-50%, -54%); }
+  position: absolute; bottom: 20px; width: 100%;
+  text-align: center; color: rgba(255,255,255,0.3);
+  font-size: 12px; letter-spacing: 2px;
 }
