@@ -3,9 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Void Runner: Hyperdrive Edition</title>
-  <meta name="description" content="Epic space shooter with 6 weapons, 2-player co-op, boss battles, and stunning neon visuals!">
-  <meta name="theme-color" content="#050510">
+  <title>Void Runner - Enhanced Edition</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Audiowide&family=Michroma&display=swap" rel="stylesheet">
@@ -59,22 +57,9 @@
         <span id="comboDisplay" class="value">x1</span>
         <div class="chip-glow"></div>
       </div>
-      <div class="hud-chip health-chip">
-        <span class="label">HULL</span>
-        <span id="healthDisplay" class="value">100</span>
-        <div class="chip-glow"></div>
-      </div>
       <div class="hud-chip">
         <span class="label">SHIELD</span>
         <span id="shieldDisplay" class="value">0</span>
-        <div class="chip-glow"></div>
-      </div>
-      <div class="hud-chip hyper-chip">
-        <span class="label">HYPER CHARGE</span>
-        <div class="heat-bar-container hyper-bar-container">
-          <div id="hyperBar" class="heat-bar hyper-bar"></div>
-        </div>
-        <span id="hyperDisplay" class="value">0%</span>
         <div class="chip-glow"></div>
       </div>
       <div class="hud-chip">
@@ -86,29 +71,22 @@
         <span>SOUND: ON</span>
       </button>
     </header>
-    <div id="eventAlert" class="hidden">EVENT ACTIVE</div>
 
     <section id="startScreen" class="panel">
       <h1>VOID RUNNER</h1>
-      <p class="subtitle">🚀 HYPERDRIVE EDITION 🚀</p>
+      <p class="subtitle">⚡ ENHANCED COMBAT PROTOCOL ⚡</p>
       <div class="features">
-        <div class="feature">⚡ BLASTER MK-II - Rapid Fire</div>
-        <div class="feature">💥 SCATTER BLASTER - Shotgun Spread</div>
-        <div class="feature">🔷 RAILGUN - Piercing Shot</div>
-        <div class="feature">🌟 VOID BEAM - Continuous Laser</div>
-        <div class="feature">🚀 SWARM MISSILES - Homing Attack</div>
-        <div class="feature">🌀 SINGULARITY - Black Hole Bomb</div>
+        <div class="feature">🎯 6 DEVASTATING WEAPONS</div>
+        <div class="feature">💥 ADVANCED PARTICLE EFFECTS</div>
+        <div class="feature">🌟 COMBO MULTIPLIER SYSTEM</div>
         <div class="feature">👥 2 PLAYER CO-OP</div>
-        <div class="feature">💀 BOSS BATTLES</div>
-        <div class="feature">🎯 COMBO SYSTEM</div>
-        <div class="feature">🔥 FRENZY STREAK MODE</div>
-        <div class="feature">🛡️ SHIELDS & OVERDRIVE</div>
-        <div class="feature">🌌 HYPER NOVA ULTIMATE</div>
-        <div class="feature">⚠️ DYNAMIC EVENT WAVES</div>
+        <div class="feature">🌈 RAINBOW SPACE VISUALS</div>
+        <div class="feature">⌨️ KEYBOARD-ONLY COMBAT</div>
+        <div class="feature">🛡️ SHIELD + OVERDRIVE POWERUPS</div>
         <div class="feature">🤖 DRONE INTERCEPTORS</div>
-        <div class="feature">☄️ ELITE ASTEROIDS</div>
+        <div class="feature">☄️ ELITE ASTEROID WAVES</div>
       </div>
-      <p class="instruction">Destroy asteroids and enemies before they breach your position!</p>
+      <p class="instruction">Annihilate incoming asteroids before breach</p>
       <div class="mode-select">
         <p class="mode-label">SELECT PILOT COUNT</p>
         <div class="mode-buttons">
@@ -118,12 +96,12 @@
       </div>
       <div class="controls-grid">
         <div class="control-item">
-          <span class="key">P1 ARROWS + SPACE</span>
+          <span class="key">P1 ARROWS</span>
           <span class="desc">Move + Fire</span>
         </div>
         <div class="control-item">
-          <span class="key">Q</span>
-          <span class="desc">Switch Weapon</span>
+          <span class="key">ENTER</span>
+          <span class="desc">Deploy / Redeploy</span>
         </div>
         <div class="control-item p2-only">
           <span class="key">P2 WASD</span>
@@ -134,12 +112,8 @@
           <span class="desc">Pilot Two Fire</span>
         </div>
         <div class="control-item">
-          <span class="key">SHIFT</span>
-          <span class="desc">Dash / Void Jump</span>
-        </div>
-        <div class="control-item">
-          <span class="key">X / V</span>
-          <span class="desc">Hyper Nova</span>
+          <span class="key">KEYBOARD</span>
+          <span class="desc">No Mouse Controls</span>
         </div>
         <div class="control-item">
           <span class="key">M</span>
@@ -147,7 +121,7 @@
         </div>
       </div>
       <button id="deployButton" class="deploy-button" type="button">DEPLOY NOW</button>
-      <p class="start-prompt">PRESS 1 OR 2 TO SWITCH MODES, THEN ENTER TO DEPLOY</p>
+      <p class="start-prompt">TIP: PRESS 1 OR 2 TO SWITCH MODES, THEN ENTER TO DEPLOY</p>
     </section>
 
     <section id="gameOverScreen" class="panel hidden">
@@ -166,19 +140,11 @@
           <span class="stat-label">MAX COMBO</span>
           <span id="maxCombo" class="stat-value">x1</span>
         </div>
-        <div class="stat">
-          <span class="stat-label">BEST SCORE</span>
-          <span id="bestScore" class="stat-value">0</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">BEST WAVE</span>
-          <span id="bestWave" class="stat-value">1</span>
-        </div>
       </div>
       <p class="start-prompt">PRESS ENTER TO REDEPLOY (PRESS 1 OR 2 TO SWITCH MODE)</p>
     </section>
 
-    <div id="controlHint">P1: ARROWS + SPACE + Q + SHIFT + X  |  P2: WASD + F + E + C + V  |  M: SOUND</div>
+    <div id="controlHint">P1: ARROWS MOVE + FIRE  |  P2: WASD + F  |  NO MOUSE INPUT</div>
   </div>
 
   <script src="game.js"></script>

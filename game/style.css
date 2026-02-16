@@ -8,7 +8,6 @@
   --neon-pink: #ff2e97;
   --neon-purple: #b537ff;
   --neon-orange: #ff8c00;
-  --neon-yellow: #ffe28b;
   --warning: #ff4757;
   --critical: #ff1744;
   --panel-bg: rgba(6, 10, 22, 0.88);
@@ -41,7 +40,7 @@ body::before {
   content: '';
   position: fixed;
   inset: 0;
-  background:
+  background: 
     radial-gradient(circle at 30% 20%, rgba(255, 92, 220, 0.12), transparent 42%),
     radial-gradient(circle at 70% 80%, rgba(130, 110, 255, 0.1), transparent 38%),
     radial-gradient(circle at 60% 42%, rgba(81, 255, 212, 0.08), transparent 35%),
@@ -120,7 +119,7 @@ body::before {
 .chromatic {
   position: absolute;
   inset: 0;
-  background:
+  background: 
     radial-gradient(circle at 50% 50%, transparent 70%, rgba(255, 0, 0, 0.02) 100%);
   mix-blend-mode: screen;
   pointer-events: none;
@@ -218,7 +217,7 @@ body::before {
   font-weight: 700;
   letter-spacing: 1.5px;
   color: var(--neon-cyan);
-  text-shadow:
+  text-shadow: 
     0 0 10px rgba(0, 243, 255, 0.8),
     0 0 20px rgba(0, 243, 255, 0.4);
   animation: valueGlow 2s ease-in-out infinite alternate;
@@ -243,7 +242,7 @@ body::before {
 }
 
 #waveDisplay {
-  color: var(--neon-yellow);
+  color: #ffe28b;
   text-shadow: 0 0 12px rgba(255, 200, 104, 0.85), 0 0 22px rgba(255, 157, 43, 0.34);
 }
 
@@ -268,7 +267,7 @@ body::before {
 #weaponDisplay {
   font-size: 18px;
   color: var(--neon-orange);
-  text-shadow:
+  text-shadow: 
     0 0 10px rgba(255, 140, 0, 0.8),
     0 0 20px rgba(255, 140, 0, 0.4);
 }
@@ -337,7 +336,7 @@ body::before {
 
 .combo-chip #comboDisplay {
   color: var(--neon-lime);
-  text-shadow:
+  text-shadow: 
     0 0 10px rgba(127, 255, 109, 0.8),
     0 0 20px rgba(127, 255, 109, 0.4);
 }
@@ -347,16 +346,6 @@ body::before {
   text-shadow:
     0 0 12px rgba(255, 230, 122, 0.9),
     0 0 28px rgba(255, 172, 46, 0.5);
-}
-
-#healthDisplay {
-  color: #ff9fa7;
-  text-shadow: 0 0 12px rgba(255, 99, 115, 0.8), 0 0 22px rgba(255, 42, 77, 0.45);
-}
-
-#healthDisplay.warning {
-  color: #ff6b6b;
-  animation: criticalText 0.35s ease-in-out infinite;
 }
 
 #shieldDisplay {
@@ -380,48 +369,13 @@ body::before {
 }
 
 #statusText.overdrive {
-  color: var(--neon-yellow);
+  color: #ffd073;
   text-shadow: 0 0 14px rgba(255, 176, 74, 0.9), 0 0 28px rgba(255, 132, 29, 0.55);
 }
 
 #statusText.alert {
   color: #ff6b6b;
   text-shadow: 0 0 16px rgba(255, 83, 83, 0.95), 0 0 30px rgba(255, 32, 32, 0.5);
-}
-
-#statusText.frenzy {
-  color: #ffd670;
-  text-shadow: 0 0 16px rgba(255, 214, 112, 0.95), 0 0 30px rgba(255, 167, 72, 0.5);
-}
-
-.hyper-chip {
-  min-width: 170px;
-}
-
-.hyper-bar-container {
-  border-color: rgba(255, 196, 65, 0.35);
-}
-
-.hyper-bar {
-  background: linear-gradient(90deg, #84d5ff, #ff8a2a);
-  box-shadow: 0 0 12px rgba(255, 138, 42, 0.8);
-}
-
-.hyper-bar.ready {
-  background: linear-gradient(90deg, #ffe07c, #ff5f2d);
-  box-shadow: 0 0 16px rgba(255, 105, 52, 1);
-  animation: criticalPulse 0.4s ease-in-out infinite;
-}
-
-#hyperDisplay {
-  font-size: 16px;
-  color: #ffd58a;
-  text-shadow: 0 0 10px rgba(255, 196, 108, 0.8);
-}
-
-#hyperDisplay.ready {
-  color: #fff0b3;
-  text-shadow: 0 0 14px rgba(255, 214, 112, 0.95), 0 0 24px rgba(255, 125, 54, 0.7);
 }
 
 .hud-button {
@@ -436,7 +390,7 @@ body::before {
   letter-spacing: 1.5px;
   padding: 13px 18px;
   cursor: pointer;
-  box-shadow:
+  box-shadow: 
     0 0 20px rgba(127, 255, 109, 0.25),
     0 0 0 1px rgba(127, 255, 109, 0.35) inset;
   transition: all 0.2s ease;
@@ -459,7 +413,7 @@ body::before {
 .hud-button:hover,
 .hud-button:focus-visible {
   transform: translateY(-2px);
-  box-shadow:
+  box-shadow: 
     0 0 30px rgba(127, 255, 109, 0.45),
     0 0 0 1px rgba(127, 255, 109, 0.5) inset;
   outline: none;
@@ -469,7 +423,7 @@ body::before {
 .hud-button[aria-pressed='false'] {
   border-color: var(--warning);
   color: #ffd0d0;
-  box-shadow:
+  box-shadow: 
     0 0 20px rgba(255, 71, 87, 0.25),
     0 0 0 1px rgba(255, 71, 87, 0.3) inset;
 }
@@ -680,10 +634,10 @@ body::before {
   font-size: 14px;
   letter-spacing: 1.8px;
   padding: 12px 14px;
-  cursor: pointer;
+  cursor: default;
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
   box-shadow: 0 0 0 1px rgba(0, 243, 255, 0.2) inset;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .mode-btn:hover,
@@ -714,12 +668,12 @@ body::before {
   font-size: clamp(15px, 2vw, 18px);
   letter-spacing: 2.4px;
   padding: 13px 22px;
-  cursor: pointer;
+  cursor: default;
   box-shadow:
     0 0 22px rgba(127, 255, 109, 0.2),
     0 0 0 1px rgba(127, 255, 109, 0.32) inset;
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .deploy-button:hover,
@@ -802,48 +756,9 @@ body.single-player .p2-only {
   display: none;
 }
 
-#eventAlert {
-  position: absolute;
-  top: 125px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 10px 20px;
-  border-radius: 999px;
-  border: 1.5px solid rgba(255, 216, 125, 0.7);
-  background: linear-gradient(145deg, rgba(49, 20, 4, 0.92), rgba(17, 12, 6, 0.88));
-  color: #ffdca4;
-  font-family: 'Audiowide', monospace;
-  font-size: 14px;
-  letter-spacing: 1.8px;
-  text-shadow: 0 0 12px rgba(255, 193, 102, 0.85);
-  box-shadow:
-    0 0 20px rgba(255, 150, 88, 0.3),
-    0 0 0 1px rgba(255, 178, 101, 0.4) inset;
-  z-index: 5;
-  animation: alertFlash 0.9s ease-in-out infinite alternate;
-}
-
-#eventAlert.frenzy {
-  border-color: rgba(255, 236, 138, 0.8);
-  background: linear-gradient(145deg, rgba(55, 34, 5, 0.93), rgba(23, 13, 5, 0.88));
-  color: #fff2bb;
-}
-
-#eventAlert.warning {
-  border-color: rgba(255, 112, 112, 0.8);
-  background: linear-gradient(145deg, rgba(67, 12, 18, 0.92), rgba(20, 8, 12, 0.9));
-  color: #ffc8c8;
-  text-shadow: 0 0 12px rgba(255, 109, 109, 0.85);
-}
-
-@keyframes alertFlash {
-  from { opacity: 0.75; transform: translateX(-50%) translateY(0); }
-  to { opacity: 1; transform: translateX(-50%) translateY(-3px); }
-}
-
 #audioToggle {
-  pointer-events: auto;
-  cursor: pointer;
+  pointer-events: none;
+  cursor: default;
 }
 
 @keyframes hintFade {
@@ -876,12 +791,6 @@ body.single-player .p2-only {
   .hud-button {
     width: 100%;
     max-width: 300px;
-  }
-
-  #eventAlert {
-    top: 160px;
-    width: calc(100% - 30px);
-    text-align: center;
   }
 
   .controls-grid {

@@ -21,8 +21,8 @@ def load_game_html() -> str:
 
 
 st.set_page_config(
-    page_title="Void Runner: Hyperdrive Edition",
-    page_icon="🚀",
+    page_title="Void Runner",
+    page_icon="🕹️",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
