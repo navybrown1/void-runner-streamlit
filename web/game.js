@@ -24,6 +24,8 @@
         maxBullets: 650,
         maxEnemyBullets: 320,
         maxEnemies: 220,
+        maxShake: 8,
+        shakeDecay: 24,
         debugPerf: DEBUG_BY_DEFAULT
     };
 
@@ -2195,6 +2197,7 @@
             return;
         }
         state.t += dt;
+        state.shake = Math.max(0, state.shake - dt * CONFIG.shakeDecay);
 
         if(state.hitStop > 0) {
             state.hitStop--;
@@ -2254,6 +2257,7 @@
             Entities.update(dt);
             updateHud();
         }
+        state.shake = clamp(state.shake, 0, CONFIG.maxShake);
     }
 
     function loop(now) {
@@ -2300,17 +2304,17 @@
             ctx.fillRect(0, 0, state.width, state.height);
         }
 
-        // Screen Shake
+        // Screen Shake (apply only to gameplay entities; keep HUD/post layers stable)
         ctx.save();
         if(state.shake > 0) {
-            const s = state.shake;
-            const dx = (Math.random()-0.5) * s;
-            const dy = (Math.random()-0.5) * s;
+            const trauma = Math.min(1, state.shake / CONFIG.maxShake);
+            const magnitude = trauma * trauma * 5;
+            const dx = (Math.random() * 2 - 1) * magnitude;
+            const dy = (Math.random() * 2 - 1) * magnitude;
             ctx.translate(dx, dy);
-            state.shake = Math.max(0, state.shake - dt * 40);
         }
-
         Entities.draw(ctx);
+        ctx.restore();
 
         if(state.overdriveTimer > 0) {
             const p = 0.12 + Math.sin(state.t * 14) * 0.04;
@@ -2340,8 +2344,6 @@
         if(RenderCache.vignette) {
             ctx.drawImage(RenderCache.vignette, 0, 0, state.width, state.height);
         }
-
-        ctx.restore();
     }
 
     // --- INIT ---
