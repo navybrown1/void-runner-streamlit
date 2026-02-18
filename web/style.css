@@ -202,6 +202,11 @@ body::before {
   transition: all 0.3s ease;
 }
 
+.hud-chip > * {
+  position: relative;
+  z-index: 1;
+}
+
 .audio-chip {
   min-width: 260px;
 }
@@ -254,6 +259,8 @@ body::before {
   background: radial-gradient(circle, rgba(0, 243, 255, 0.15), transparent 70%);
   opacity: 0;
   animation: chipPulse 3s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
 }
 
 @keyframes chipPulse {
