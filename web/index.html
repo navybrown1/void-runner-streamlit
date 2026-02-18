@@ -80,6 +80,9 @@
                   <span>PAUSE</span>
                 </button>
               </div>
+              <button id="restartButton" type="button" class="hud-button restart-btn">
+                <span>RESTART</span>
+              </button>
               <label class="volume-control" for="volumeSlider">
                 <span>VOL</span>
                 <input id="volumeSlider" type="range" min="0" max="100" step="1" value="70" aria-label="Master volume">
@@ -134,8 +137,8 @@
               <span class="desc">P2 Fire (Hold)</span>
             </div>
             <div class="control-item">
-              <span class="key">M</span>
-              <span class="desc">Mute Toggle</span>
+              <span class="key">M / R</span>
+              <span class="desc">Mute / Restart Menu</span>
             </div>
           </div>
           <button id="deployButton" class="deploy-button" type="button">DEPLOY NOW</button>
@@ -167,7 +170,7 @@
           <div class="pause-subtitle">CLICK RESUME OR PRESS P</div>
         </div>
 
-        <div id="controlHint">P1: ARROWS + SPACE | P2: WASD + F | MUTE: M | CLICK: MODE + DEPLOY</div>
+        <div id="controlHint">P1: ARROWS + SPACE | P2: WASD + F | MUTE: M | RESTART: R | CLICK: MODE + DEPLOY</div>
         <div id="perfDebug" class="hidden" aria-live="polite"></div>
       </div>
     </div>

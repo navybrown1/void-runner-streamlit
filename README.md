@@ -17,6 +17,7 @@ Neon arcade shooter with one shared game codebase.
 - P2 fire: `F` (hold to continuous fire)
 - Deploy/redeploy: `Enter` or click `DEPLOY NOW`
 - Pause/resume: `P` / `Esc` or click `PAUSE`
+- Restart to mode-select menu: `R` or click `RESTART`
 - Mode select: click `1 PLAYER` / `2 PLAYERS`
 - Mute toggle: `M` or click `SOUND` button
 - Debug perf overlay: `?debug=1` in URL or `F3`

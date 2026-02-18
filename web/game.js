@@ -55,6 +55,7 @@
         maxCombo: document.getElementById('maxCombo'),
         audioBtn: document.getElementById('audioToggle'),
         pauseBtn: document.getElementById('pauseButton'),
+        restartBtn: document.getElementById('restartButton'),
         volume: document.getElementById('volumeSlider'),
         volumeValue: document.getElementById('volumeValue'),
         deployBtn: document.getElementById('deployButton'),
@@ -113,8 +114,8 @@
     };
 
     const CONTROL_HINTS = {
-        1: 'P1: ARROWS MOVE | P1 FIRE: SPACE | CLICK DEPLOY | PAUSE: P',
-        2: 'P1: ARROWS + SPACE | P2: WASD + F | CLICK MODE + DEPLOY | PAUSE: P'
+        1: 'P1: ARROWS MOVE | P1 FIRE: SPACE | PAUSE: P | RESTART: R',
+        2: 'P1: ARROWS + SPACE | P2: WASD + F | PAUSE: P | RESTART: R'
     };
 
     function clamp(value, min, max) {
@@ -2530,6 +2531,31 @@
         updatePauseUi();
     }
 
+    function returnToMenu() {
+        state.running = false;
+        state.gameOver = false;
+        state.paused = false;
+        state.hitStop = 0;
+        state.shake = 0;
+        state.accumulator = 0;
+        state.overdriveTimer = 0;
+        spawnTimer = 0;
+        droneSpawnTimer = 0;
+        resetInput();
+
+        Entities.clear(state.playerMode);
+
+        ui.start.classList.remove('hidden');
+        ui.over.classList.add('hidden');
+        ui.score.classList.add('hidden');
+        ui.status.innerText = 'READY';
+        ui.status.classList.remove('overdrive', 'alert');
+        ui.comboChip.classList.remove('hot');
+        ui.shield.classList.remove('active');
+        updatePauseUi();
+        setPlayerMode(state.playerMode);
+    }
+
     function handleDeployAction() {
         if(state.running && state.paused && !state.gameOver) {
             setPaused(false);
@@ -2541,7 +2567,7 @@
     const GAME_KEYS = new Set([
         'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
         'KeyW', 'KeyA', 'KeyS', 'KeyD',
-        'Space', 'KeyF', 'Enter', 'Escape', 'KeyP',
+        'Space', 'KeyF', 'Enter', 'Escape', 'KeyP', 'KeyR',
         'Digit1', 'Digit2', 'Numpad1', 'Numpad2', 'KeyM', 'F3'
     ]);
 
@@ -2582,6 +2608,14 @@
         });
     }
 
+    if(ui.restartBtn) {
+        ui.restartBtn.addEventListener('click', () => {
+            Audio.init();
+            Audio.sfx.uiClick();
+            returnToMenu();
+        });
+    }
+
     if(ui.volume) {
         ui.volume.addEventListener('input', () => {
             Audio.init();
@@ -2609,6 +2643,11 @@
 
         if((e.code === 'KeyP' || e.code === 'Escape') && state.running && !state.gameOver) {
             setPaused(!state.paused);
+            return;
+        }
+
+        if(e.code === 'KeyR') {
+            returnToMenu();
             return;
         }
 

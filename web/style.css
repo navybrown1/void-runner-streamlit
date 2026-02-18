@@ -469,6 +469,23 @@ body::before {
   max-width: none;
 }
 
+.restart-btn {
+  border-color: rgba(255, 169, 105, 0.8);
+  color: #ffe2c9;
+  background: linear-gradient(160deg, rgba(36, 18, 8, 0.95), rgba(18, 9, 5, 0.9));
+  box-shadow:
+    0 0 20px rgba(255, 135, 56, 0.2),
+    0 0 0 1px rgba(255, 150, 77, 0.28) inset;
+}
+
+.restart-btn:hover,
+.restart-btn:focus-visible {
+  border-color: #ffb47e;
+  box-shadow:
+    0 0 28px rgba(255, 149, 79, 0.32),
+    0 0 0 1px rgba(255, 177, 121, 0.4) inset;
+}
+
 .hud-button::before {
   content: '';
   position: absolute;
