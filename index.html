@@ -1,0 +1,868 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nova Strike</title>
+  <style>
+    :root{
+      --bg:#070914;
+      --panel:#0b1028;
+      --ink:#d7e3ff;
+      --muted:#8aa0d8;
+      --accent:#7cffd6;
+      --danger:#ff4d6d;
+      --warn:#ffd166;
+    }
+    html,body{ height:100%; margin:0; background:var(--bg); color:var(--ink); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+    #wrap{ position:fixed; inset:0; overflow:hidden; }
+    canvas{ position:absolute; inset:0; width:100%; height:100%; background: radial-gradient(1200px 700px at 50% 70%, #0b1330 0%, #070914 60%, #040611 100%); }
+    #hud{
+      position:absolute; top:14px; left:14px; right:14px;
+      display:flex; gap:12px; align-items:flex-start; justify-content:space-between;
+      pointer-events:none;
+    }
+    .panel{
+      pointer-events:none;
+      background: color-mix(in oklab, var(--panel) 82%, transparent);
+      border:1px solid rgba(124,255,214,0.18);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      border-radius:14px;
+      padding:10px 12px;
+      backdrop-filter: blur(8px);
+      min-width: 260px;
+    }
+    .title{
+      font-weight:800; letter-spacing:0.7px; text-transform:uppercase;
+      font-size:12px; color:rgba(215,227,255,0.9);
+      display:flex; align-items:center; gap:8px;
+    }
+    .dot{ width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 18px rgba(124,255,214,0.9); }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
+    .stat{
+      flex: 1 1 auto;
+      min-width: 110px;
+      padding:8px 10px;
+      background: rgba(255,255,255,0.04);
+      border:1px solid rgba(255,255,255,0.07);
+      border-radius:12px;
+    }
+    .k{ font-size:11px; color:rgba(138,160,216,0.9); }
+    .v{ font-size:16px; font-weight:800; margin-top:2px; }
+    .barWrap{
+      margin-top:8px;
+      height:10px; border-radius:999px;
+      background: rgba(255,255,255,0.06);
+      border:1px solid rgba(255,255,255,0.08);
+      overflow:hidden;
+    }
+    .bar{ height:100%; width:0%; background: linear-gradient(90deg, var(--accent), #7ca7ff); }
+    .bar.hot{ background: linear-gradient(90deg, var(--warn), var(--danger)); }
+    #center{
+      position:absolute; inset:0;
+      display:grid; place-items:center;
+      pointer-events:none;
+    }
+    #card{
+      pointer-events:none;
+      width:min(720px, calc(100% - 28px));
+      background: color-mix(in oklab, var(--panel) 86%, transparent);
+      border:1px solid rgba(124,255,214,0.18);
+      border-radius:18px;
+      padding:18px 18px 14px;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.45);
+      backdrop-filter: blur(10px);
+    }
+    #card h1{ margin:0; font-size:22px; letter-spacing:0.2px; }
+    #card p{ margin:10px 0 0; color:rgba(215,227,255,0.84); line-height:1.35; }
+    .keys{
+      margin-top:12px; display:grid; grid-template-columns: 1fr 1fr; gap:10px;
+    }
+    .chip{
+      border-radius:14px; padding:10px 12px;
+      background: rgba(255,255,255,0.04);
+      border:1px solid rgba(255,255,255,0.07);
+    }
+    .chip b{ color:var(--accent); }
+    .hint{
+      margin-top:12px; font-size:12px; color:rgba(138,160,216,0.95);
+    }
+    #footerHint{
+      position:absolute; bottom:14px; left:14px; right:14px;
+      display:flex; justify-content:center; pointer-events:none;
+      color:rgba(138,160,216,0.92); font-size:12px;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <canvas id="game"></canvas>
+
+    <div id="hud">
+      <div class="panel">
+        <div class="title"><span class="dot"></span> Nova Strike</div>
+        <div class="row">
+          <div class="stat"><div class="k">Score</div><div class="v" id="sScore">0</div></div>
+          <div class="stat"><div class="k">Kills</div><div class="v" id="sKills">0</div></div>
+          <div class="stat"><div class="k">Wave</div><div class="v" id="sWave">1</div></div>
+        </div>
+        <div class="row">
+          <div class="stat"><div class="k">Weapon</div><div class="v" id="sWeapon">Pulse</div></div>
+          <div class="stat"><div class="k">Shield</div><div class="v" id="sShield">0</div></div>
+        </div>
+        <div class="k" style="margin-top:8px;">Heat</div>
+        <div class="barWrap"><div class="bar hot" id="heatBar"></div></div>
+      </div>
+
+      <div class="panel" style="min-width: 320px;">
+        <div class="title"><span class="dot"></span> Controls</div>
+        <div class="row">
+          <div class="stat"><div class="k">Move</div><div class="v">W A S D</div></div>
+          <div class="stat"><div class="k">Shoot</div><div class="v">Space</div></div>
+          <div class="stat"><div class="k">Weapon</div><div class="v">1 2 3</div></div>
+          <div class="stat"><div class="k">Pause</div><div class="v">P</div></div>
+        </div>
+        <div class="hint">No mouse movement. Shooting only happens while Space is held.</div>
+      </div>
+    </div>
+
+    <div id="center">
+      <div id="card">
+        <h1>Press Enter to Start</h1>
+        <p>
+          This build fixes the lag and the annoying auto-fire bug. Bullets and particles use pooling to avoid garbage collection spikes.
+          Audio is WebAudio-based and lightweight.
+        </p>
+        <div class="keys">
+          <div class="chip"><b>WASD</b> to move</div>
+          <div class="chip"><b>Space</b> to shoot (hold to fire)</div>
+          <div class="chip"><b>1</b> Pulse (fast)</div>
+          <div class="chip"><b>2</b> Plasma (spread)</div>
+          <div class="chip"><b>3</b> Rail (pierce)</div>
+          <div class="chip"><b>P</b> pause</div>
+        </div>
+        <div class="hint">Tip: If you hold Space forever, heat climbs and your gun locks until it cools.</div>
+      </div>
+    </div>
+
+    <div id="footerHint">If you see lag: open DevTools → Performance. If GC spikes appear, tell me and I will tune pools higher.</div>
+  </div>
+
+  <script>
+    (() => {
+      // ----------------------------
+      // Performance-first config
+      // ----------------------------
+      const CFG = {
+        maxDt: 1/30,
+        dprCap: 2,
+        playerSpeed: 560,
+        playerAccel: 2600,
+        friction: 10,
+        bulletCap: 220,
+        enemyCap: 140,
+        particleCap: 520,
+        starCap: 180,
+        baseFireRate: 13, // shots per second (Pulse)
+        heatPerShot: 0.065,
+        heatCool: 0.42,
+        heatLock: 1.0,
+        heatUnlock: 0.55,
+      };
+
+      // ----------------------------
+      // DOM
+      // ----------------------------
+      const canvas = document.getElementById("game");
+      const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
+
+      const $ = (id) => document.getElementById(id);
+      const elScore = $("sScore");
+      const elKills = $("sKills");
+      const elWave = $("sWave");
+      const elWeapon = $("sWeapon");
+      const elShield = $("sShield");
+      const elHeat = $("heatBar");
+      const center = document.getElementById("center");
+
+      // Only update HUD when values change
+      const HUD = { score:-1, kills:-1, wave:-1, weapon:"", shield:-1, heat:-1 };
+
+      // ----------------------------
+      // Helpers
+      // ----------------------------
+      const clamp = (v, a, b) => (v < a ? a : (v > b ? b : v));
+      const rand = (a, b) => a + Math.random() * (b - a);
+      const randInt = (a, b) => (a + (Math.random() * (b - a + 1) | 0));
+      const len = (x,y) => Math.hypot(x,y);
+
+      function resize() {
+        const dpr = Math.min(CFG.dprCap, window.devicePixelRatio || 1);
+        canvas.width = Math.floor(innerWidth * dpr);
+        canvas.height = Math.floor(innerHeight * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+      addEventListener("resize", resize, { passive:true });
+      resize();
+
+      // ----------------------------
+      // Input (fixes auto-fire)
+      // ----------------------------
+      const keys = new Set();
+      let paused = false;
+
+      addEventListener("keydown", (e) => {
+        const k = e.code;
+
+        // Prevent page scroll on Space
+        if (k === "Space") e.preventDefault();
+
+        keys.add(k);
+
+        if (k === "KeyP") paused = !paused;
+        if (k === "Digit1") setWeapon("Pulse");
+        if (k === "Digit2") setWeapon("Plasma");
+        if (k === "Digit3") setWeapon("Rail");
+
+        // Start game only on Enter
+        if (!state.running && (k === "Enter" || k === "NumpadEnter")) {
+          start();
+        }
+      }, { passive:false });
+
+      addEventListener("keyup", (e) => {
+        keys.delete(e.code);
+      }, { passive:true });
+
+      addEventListener("blur", () => {
+        keys.clear();
+        paused = false;
+      }, { passive:true });
+
+      function isDown(code){ return keys.has(code); }
+
+      // This is the bug-killer line:
+      // Fire is ONLY Space, never tied to movement keys.
+      function wantsFire(){ return isDown("Space"); }
+
+      // ----------------------------
+      // Lightweight audio (WebAudio)
+      // ----------------------------
+      let audio = null;
+      function initAudio() {
+        if (audio) return;
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        const ctxA = new AC();
+        const master = ctxA.createGain();
+        master.gain.value = 0.55;
+        master.connect(ctxA.destination);
+
+        function beep({ freq=440, dur=0.06, type="square", gain=0.12, bend=0 } = {}) {
+          const o = ctxA.createOscillator();
+          const g = ctxA.createGain();
+          o.type = type;
+          o.frequency.setValueAtTime(freq, ctxA.currentTime);
+          if (bend) o.frequency.exponentialRampToValueAtTime(freq * bend, ctxA.currentTime + dur);
+          g.gain.setValueAtTime(gain, ctxA.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.0001, ctxA.currentTime + dur);
+          o.connect(g);
+          g.connect(master);
+          o.start();
+          o.stop(ctxA.currentTime + dur);
+        }
+
+        audio = {
+          ctx: ctxA,
+          master,
+          shot: () => beep({ freq: 720, dur: 0.04, type:"square", gain:0.09, bend:0.55 }),
+          plasma: () => beep({ freq: 520, dur: 0.05, type:"sawtooth", gain:0.10, bend:0.7 }),
+          rail: () => beep({ freq: 220, dur: 0.08, type:"triangle", gain:0.12, bend:2.6 }),
+          boom: () => beep({ freq: 120, dur: 0.11, type:"square", gain:0.14, bend:0.35 }),
+          hit: () => beep({ freq: 980, dur: 0.03, type:"triangle", gain:0.06, bend:0.75 }),
+        };
+      }
+
+      // ----------------------------
+      // Object pools (fix lag spikes)
+      // ----------------------------
+      function makePool(capacity, factory) {
+        const arr = new Array(capacity);
+        for (let i=0;i<capacity;i++) arr[i] = factory();
+        return { arr, used:0, cap:capacity };
+      }
+      function spawn(pool) {
+        if (pool.used >= pool.cap) return null;
+        return pool.arr[pool.used++];
+      }
+      function killSwap(pool, i) {
+        const last = --pool.used;
+        if (i !== last) {
+          const a = pool.arr;
+          const tmp = a[i];
+          a[i] = a[last];
+          a[last] = tmp;
+        }
+      }
+
+      const bullets = makePool(CFG.bulletCap, () => ({
+        x:0,y:0,vx:0,vy:0,life:0,r:2.2, dmg:1, pierce:0, glow:0
+      }));
+      const enemies = makePool(CFG.enemyCap, () => ({
+        x:0,y:0,vx:0,vy:0,r:16,hp:3, type:0, t:0
+      }));
+      const parts = makePool(CFG.particleCap, () => ({
+        x:0,y:0,vx:0,vy:0,life:0, size:2, hot:0
+      }));
+
+      // Stars (static allocation, just update positions)
+      const stars = Array.from({length: CFG.starCap}, () => ({
+        x: Math.random()*innerWidth,
+        y: Math.random()*innerHeight,
+        z: rand(0.4, 1.5),
+      }));
+
+      // ----------------------------
+      // Game state
+      // ----------------------------
+      const state = {
+        running:false,
+        t:0,
+        score:0,
+        kills:0,
+        wave:1,
+        shield:0,
+        heat:0,
+        heatLocked:false,
+        weapon:"Pulse",
+        fireCooldown:0,
+        spawnTimer:0,
+        spawnRate: 1.1,
+        enemySpeed: 140,
+      };
+
+      const player = {
+        x: innerWidth*0.5,
+        y: innerHeight*0.78,
+        vx:0, vy:0,
+        r: 16,
+        hp: 5,
+        inv: 0,
+      };
+
+      function reset() {
+        state.t = 0;
+        state.score = 0;
+        state.kills = 0;
+        state.wave = 1;
+        state.shield = 0;
+        state.heat = 0;
+        state.heatLocked = false;
+        state.weapon = "Pulse";
+        state.fireCooldown = 0;
+        state.spawnTimer = 0;
+        state.spawnRate = 1.12;
+        state.enemySpeed = 140;
+
+        player.x = innerWidth*0.5;
+        player.y = innerHeight*0.78;
+        player.vx = 0;
+        player.vy = 0;
+        player.hp = 5;
+        player.inv = 0;
+
+        bullets.used = 0;
+        enemies.used = 0;
+        parts.used = 0;
+
+        for (const s of stars) {
+          s.x = Math.random()*innerWidth;
+          s.y = Math.random()*innerHeight;
+          s.z = rand(0.4, 1.5);
+        }
+
+        setWeapon("Pulse");
+      }
+
+      function setWeapon(name) {
+        state.weapon = name;
+        if (name === "Pulse") {
+          state.spawnRate = 1.12;
+        } else if (name === "Plasma") {
+          state.spawnRate = 1.05;
+        } else if (name === "Rail") {
+          state.spawnRate = 0.98;
+        }
+      }
+
+      function start() {
+        initAudio();
+        if (audio && audio.ctx.state === "suspended") audio.ctx.resume().catch(()=>{});
+        center.style.display = "none";
+        reset();
+        state.running = true;
+      }
+
+      function gameOver() {
+        state.running = false;
+        center.style.display = "grid";
+        const h1 = center.querySelector("h1");
+        const p = center.querySelector("p");
+        h1.textContent = "Game Over. Press Enter to Restart";
+        p.textContent = `Score ${state.score} | Kills ${state.kills} | Wave ${state.wave}. If it felt laggy, tell me your browser + FPS.`;
+      }
+
+      // ----------------------------
+      // Spawning and difficulty
+      // ----------------------------
+      function nextWave() {
+        state.wave++;
+        // Incremental difficulty that does not explode CPU:
+        state.spawnRate = Math.max(0.52, state.spawnRate * 0.92);
+        state.enemySpeed = Math.min(340, state.enemySpeed + 16);
+        state.shield += 1;
+      }
+
+      function spawnEnemy() {
+        const e = spawn(enemies);
+        if (!e) return;
+
+        const side = Math.random();
+        const margin = 40;
+
+        e.x = rand(margin, innerWidth - margin);
+        e.y = -30;
+        e.vx = rand(-35, 35);
+        e.vy = state.enemySpeed + rand(-25, 35);
+        e.r = rand(14, 22);
+        e.type = randInt(0, 2);
+        e.hp = (e.type === 0 ? 3 : e.type === 1 ? 5 : 8) + Math.floor(state.wave * 0.45);
+        e.t = rand(0, 1000);
+      }
+
+      // ----------------------------
+      // Shooting (fixed, optimized)
+      // ----------------------------
+      function tryShoot(dt) {
+        // Cooldown
+        state.fireCooldown = Math.max(0, state.fireCooldown - dt);
+
+        // Heat cool
+        state.heat = Math.max(0, state.heat - CFG.heatCool * dt);
+
+        if (state.heatLocked) {
+          if (state.heat <= CFG.heatUnlock) state.heatLocked = false;
+          return;
+        }
+
+        // Lock if overheated
+        if (state.heat >= CFG.heatLock) {
+          state.heatLocked = true;
+          return;
+        }
+
+        // Only shoot if Space is held
+        if (!wantsFire()) return;
+
+        // Respect cooldown
+        if (state.fireCooldown > 0) return;
+
+        if (state.weapon === "Pulse") {
+          shootPulse();
+          state.fireCooldown = 1 / CFG.baseFireRate;
+        } else if (state.weapon === "Plasma") {
+          shootPlasma();
+          state.fireCooldown = 1 / 9.5;
+        } else if (state.weapon === "Rail") {
+          shootRail();
+          state.fireCooldown = 1 / 5.0;
+        }
+
+        state.heat = clamp(state.heat + CFG.heatPerShot, 0, 1.25);
+      }
+
+      function bulletCommon(b, speed, spread=0, pierce=0, dmg=1, glow=0.9) {
+        const ang = -Math.PI/2 + rand(-spread, spread);
+        b.x = player.x;
+        b.y = player.y - player.r - 6;
+        b.vx = Math.cos(ang) * speed;
+        b.vy = Math.sin(ang) * speed;
+        b.life = 1.15;
+        b.r = 2.4 + glow * 0.9;
+        b.pierce = pierce;
+        b.dmg = dmg;
+        b.glow = glow;
+      }
+
+      function shootPulse() {
+        const b = spawn(bullets);
+        if (!b) return;
+        bulletCommon(b, 980, 0.03, 0, 1, 0.95);
+        if (audio) audio.shot();
+      }
+
+      function shootPlasma() {
+        // Small spread burst, still cheap due to pooling
+        const n = 3;
+        for (let i=0;i<n;i++) {
+          const b = spawn(bullets);
+          if (!b) break;
+          bulletCommon(b, 860, 0.14, 0, 1, 0.75);
+          b.r = 3.1;
+        }
+        if (audio) audio.plasma();
+      }
+
+      function shootRail() {
+        const b = spawn(bullets);
+        if (!b) return;
+        bulletCommon(b, 1300, 0.01, 2 + Math.floor(state.wave * 0.15), 2, 1.1);
+        b.r = 3.2;
+        b.life = 0.85;
+        if (audio) audio.rail();
+      }
+
+      // ----------------------------
+      // Explosions (bigger but still fast)
+      // ----------------------------
+      function explode(x, y, power=1) {
+        const count = Math.min(46, 18 + Math.floor(power * 18));
+        for (let i=0;i<count;i++) {
+          const p = spawn(parts);
+          if (!p) break;
+          const a = rand(0, Math.PI*2);
+          const sp = rand(90, 520) * (0.6 + power*0.6);
+          p.x = x; p.y = y;
+          p.vx = Math.cos(a)*sp + rand(-40,40);
+          p.vy = Math.sin(a)*sp + rand(-40,40);
+          p.life = rand(0.22, 0.62) * (0.9 + power*0.35);
+          p.size = rand(1.5, 4.4) * (0.9 + power*0.55);
+          p.hot = rand(0.4, 1.0);
+        }
+        if (audio) audio.boom();
+      }
+
+      function spark(x, y) {
+        const p = spawn(parts);
+        if (!p) return;
+        p.x = x; p.y = y;
+        p.vx = rand(-90, 90);
+        p.vy = rand(-90, 90);
+        p.life = rand(0.06, 0.16);
+        p.size = rand(1.2, 2.3);
+        p.hot = 0.25;
+        if (audio) audio.hit();
+      }
+
+      // ----------------------------
+      // Update loop
+      // ----------------------------
+      function update(dt) {
+        if (!state.running || paused) return;
+
+        state.t += dt;
+
+        // Stars
+        for (const s of stars) {
+          s.y += 90 * s.z * dt;
+          if (s.y > innerHeight + 10) { s.y = -10; s.x = Math.random()*innerWidth; }
+        }
+
+        // Movement
+        let ax = 0, ay = 0;
+        if (isDown("KeyA")) ax -= 1;
+        if (isDown("KeyD")) ax += 1;
+        if (isDown("KeyW")) ay -= 1;
+        if (isDown("KeyS")) ay += 1;
+
+        const mag = Math.hypot(ax, ay) || 1;
+        ax = (ax / mag) * CFG.playerAccel;
+        ay = (ay / mag) * CFG.playerAccel;
+
+        player.vx += ax * dt;
+        player.vy += ay * dt;
+
+        // Friction
+        const f = Math.exp(-CFG.friction * dt);
+        player.vx *= f;
+        player.vy *= f;
+
+        // Clamp speed
+        const sp = Math.hypot(player.vx, player.vy);
+        const maxSp = CFG.playerSpeed;
+        if (sp > maxSp) {
+          player.vx = (player.vx / sp) * maxSp;
+          player.vy = (player.vy / sp) * maxSp;
+        }
+
+        player.x += player.vx * dt;
+        player.y += player.vy * dt;
+
+        player.x = clamp(player.x, player.r + 10, innerWidth - player.r - 10);
+        player.y = clamp(player.y, player.r + 10, innerHeight - player.r - 10);
+
+        if (player.inv > 0) player.inv = Math.max(0, player.inv - dt);
+
+        // Shooting
+        tryShoot(dt);
+
+        // Spawning
+        state.spawnTimer -= dt;
+        if (state.spawnTimer <= 0) {
+          spawnEnemy();
+          state.spawnTimer = state.spawnRate;
+        }
+
+        // Bullets
+        for (let i=0;i<bullets.used;i++) {
+          const b = bullets.arr[i];
+          b.x += b.vx * dt;
+          b.y += b.vy * dt;
+          b.life -= dt;
+
+          // Kill if out or expired
+          if (b.life <= 0 || b.y < -80 || b.y > innerHeight + 80 || b.x < -80 || b.x > innerWidth + 80) {
+            killSwap(bullets, i); i--; continue;
+          }
+        }
+
+        // Enemies
+        for (let i=0;i<enemies.used;i++) {
+          const e = enemies.arr[i];
+          e.t += dt;
+          // gentle weave for variety, very cheap math
+          const wobble = Math.sin(e.t * (0.8 + e.type*0.35)) * (18 + e.type*10);
+          e.x += (e.vx + wobble) * dt;
+          e.y += e.vy * dt;
+
+          if (e.y > innerHeight + 90) {
+            // Enemy escaped: small penalty but no drama
+            state.score = Math.max(0, state.score - 10);
+            killSwap(enemies, i); i--; continue;
+          }
+
+          // Player collision
+          const dx = e.x - player.x, dy = e.y - player.y;
+          const rr = e.r + player.r;
+          if (dx*dx + dy*dy < rr*rr) {
+            if (player.inv <= 0) {
+              if (state.shield > 0) {
+                state.shield--;
+                player.inv = 0.6;
+              } else {
+                player.hp--;
+                player.inv = 1.0;
+              }
+              explode(player.x, player.y, 0.9);
+              if (player.hp <= 0) { gameOver(); return; }
+            }
+            // remove the enemy on collision
+            killSwap(enemies, i); i--; continue;
+          }
+        }
+
+        // Bullet vs enemy
+        for (let bi=0; bi<bullets.used; bi++) {
+          const b = bullets.arr[bi];
+          let hit = false;
+          for (let ei=0; ei<enemies.used; ei++) {
+            const e = enemies.arr[ei];
+            const dx = e.x - b.x, dy = e.y - b.y;
+            const rr = e.r + b.r;
+            if (dx*dx + dy*dy < rr*rr) {
+              e.hp -= b.dmg;
+              spark(b.x, b.y);
+
+              if (e.hp <= 0) {
+                state.kills++;
+                state.score += 25 + Math.floor(state.wave * 2);
+                explode(e.x, e.y, 1.05 + e.type*0.25);
+                killSwap(enemies, ei);
+                ei--;
+              }
+
+              if (b.pierce > 0) {
+                b.pierce--;
+                // keep going
+              } else {
+                killSwap(bullets, bi);
+                bi--;
+              }
+              hit = true;
+              break;
+            }
+          }
+          if (hit) continue;
+        }
+
+        // Particles
+        for (let i=0;i<parts.used;i++) {
+          const p = parts.arr[i];
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.vx *= Math.exp(-6.5 * dt);
+          p.vy *= Math.exp(-6.5 * dt);
+          p.life -= dt;
+          if (p.life <= 0) {
+            killSwap(parts, i); i--; continue;
+          }
+        }
+
+        // Wave progression
+        // Every X kills: next wave
+        const targetKills = 14 + (state.wave * 5);
+        if (state.kills >= targetKills * state.wave) {
+          nextWave();
+        }
+
+        // HUD update
+        renderHUD();
+      }
+
+      // ----------------------------
+      // Render
+      // ----------------------------
+      function render() {
+        // Background
+        ctx.clearRect(0,0,innerWidth,innerHeight);
+
+        // Stars
+        ctx.globalAlpha = 0.95;
+        ctx.fillStyle = "rgba(215,227,255,0.7)";
+        for (const s of stars) {
+          const size = 1.2 * s.z;
+          ctx.fillRect(s.x, s.y, size, size);
+        }
+
+        // Particles
+        for (let i=0;i<parts.used;i++) {
+          const p = parts.arr[i];
+          const a = clamp(p.life * 2.6, 0, 1);
+          ctx.globalAlpha = a;
+          // cheap glow via shadow, limited use
+          ctx.shadowBlur = 10 * p.hot;
+          ctx.shadowColor = "rgba(255,130,90,0.8)";
+          ctx.fillStyle = "rgba(255,190,120,0.95)";
+          ctx.fillRect(p.x - p.size*0.5, p.y - p.size*0.5, p.size, p.size);
+        }
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1;
+
+        // Enemies
+        for (let i=0;i<enemies.used;i++) {
+          const e = enemies.arr[i];
+          const a = 1;
+          ctx.globalAlpha = a;
+          ctx.shadowBlur = 18;
+          ctx.shadowColor = "rgba(255,77,109,0.35)";
+          ctx.fillStyle = "rgba(255,77,109,0.95)";
+          ctx.beginPath();
+          ctx.arc(e.x, e.y, e.r, 0, Math.PI*2);
+          ctx.fill();
+
+          // inner core
+          ctx.shadowBlur = 0;
+          ctx.fillStyle = "rgba(215,227,255,0.85)";
+          ctx.beginPath();
+          ctx.arc(e.x + e.r*0.15, e.y - e.r*0.1, e.r*0.22, 0, Math.PI*2);
+          ctx.fill();
+
+          // HP hint line (tiny)
+          const hp = clamp(e.hp / (10 + state.wave), 0, 1);
+          ctx.globalAlpha = 0.8;
+          ctx.fillStyle = "rgba(124,255,214,0.9)";
+          ctx.fillRect(e.x - e.r, e.y + e.r + 7, (e.r*2)*hp, 3);
+          ctx.globalAlpha = 1;
+        }
+        ctx.shadowBlur = 0;
+
+        // Bullets
+        for (let i=0;i<bullets.used;i++) {
+          const b = bullets.arr[i];
+          ctx.shadowBlur = 14 * b.glow;
+          ctx.shadowColor = "rgba(124,255,214,0.55)";
+          ctx.fillStyle = "rgba(124,255,214,0.98)";
+          ctx.fillRect(b.x - 1.6, b.y - 6.5, 3.2, 13);
+        }
+        ctx.shadowBlur = 0;
+
+        // Player
+        const blink = (player.inv > 0 && (Math.floor(state.t*20) % 2 === 0));
+        ctx.globalAlpha = blink ? 0.35 : 1;
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = "rgba(124,255,214,0.55)";
+        ctx.fillStyle = "rgba(124,255,214,0.9)";
+        ctx.beginPath();
+        ctx.moveTo(player.x, player.y - player.r - 8);
+        ctx.lineTo(player.x - player.r, player.y + player.r);
+        ctx.lineTo(player.x, player.y + player.r*0.35);
+        ctx.lineTo(player.x + player.r, player.y + player.r);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Player HP pips (simple)
+        ctx.globalAlpha = 0.9;
+        for (let i=0;i<player.hp;i++) {
+          ctx.fillStyle = "rgba(215,227,255,0.65)";
+          ctx.fillRect(player.x - 28 + i*12, player.y + player.r + 18, 8, 4);
+        }
+        ctx.globalAlpha = 1;
+
+        // Pause text
+        if (state.running && paused) {
+          ctx.globalAlpha = 0.9;
+          ctx.fillStyle = "rgba(11,16,40,0.8)";
+          ctx.fillRect(innerWidth*0.5 - 160, innerHeight*0.5 - 44, 320, 88);
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = "rgba(215,227,255,0.95)";
+          ctx.font = "700 18px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+          ctx.fillText("Paused (press P)", innerWidth*0.5 - 78, innerHeight*0.5 + 6);
+        }
+
+        ctx.setTransform(1,0,0,1,0,0);
+      }
+
+      function renderHUD() {
+        if (HUD.score !== state.score) { HUD.score = state.score; elScore.textContent = String(state.score); }
+        if (HUD.kills !== state.kills) { HUD.kills = state.kills; elKills.textContent = String(state.kills); }
+        if (HUD.wave !== state.wave) { HUD.wave = state.wave; elWave.textContent = String(state.wave); }
+        if (HUD.weapon !== state.weapon) { HUD.weapon = state.weapon; elWeapon.textContent = state.weapon; }
+        if (HUD.shield !== state.shield) { HUD.shield = state.shield; elShield.textContent = String(state.shield); }
+
+        const h = clamp(state.heat, 0, 1);
+        const hp = Math.floor(h*100);
+        if (HUD.heat !== hp) {
+          HUD.heat = hp;
+          elHeat.style.width = hp + "%";
+        }
+      }
+
+      // ----------------------------
+      // Main loop
+      // ----------------------------
+      let last = performance.now();
+      function tick(now) {
+        const dt = clamp((now - last) / 1000, 0, CFG.maxDt);
+        last = now;
+
+        // Resize-safe player bounds if window changes a lot
+        // (keeps you from getting stuck off-screen)
+        player.x = clamp(player.x, player.r + 10, innerWidth - player.r - 10);
+        player.y = clamp(player.y, player.r + 10, innerHeight - player.r - 10);
+
+        if (state.running && !paused) update(dt);
+        render();
+
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+
+      // Make sure weapon label matches
+      setWeapon("Pulse");
+      renderHUD();
+    })();
+  </script>
+</body>
+</html>
