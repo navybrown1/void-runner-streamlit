@@ -1,13 +1,35 @@
 (function () {
     // --- ENGINE CONSTANTS ---
+    const URL_PARAMS = new URLSearchParams(window.location.search);
+    const DEBUG_BY_DEFAULT = URL_PARAMS.has('debug');
+    const START_BLOOM = URL_PARAMS.get('bloom') !== '0';
+    const START_PARTICLES = Number(URL_PARAMS.get('particles') || 1000);
+    const START_VOLUME = Number(URL_PARAMS.get('volume'));
+    const BLOOM_ALLOWED = START_BLOOM;
     const CONFIG = {
-        dtMax: 1 / 60,
+        baseWidth: 1600,
+        baseHeight: 900,
+        safeMargin: 10,
+        dtMax: 0.05,
+        fixedStep: 1 / 120,
+        maxSubSteps: 5,
         renderScale: 1.0,
-        bloomStrength: 2.0,
-        audioVolume: 0.7
+        adaptiveRenderScale: 0.86,
+        bloomEnabled: START_BLOOM,
+        audioVolume: Number.isFinite(START_VOLUME) ? Math.max(0, Math.min(1, START_VOLUME)) : 0.7,
+        maxDpr: 2,
+        maxParticles: Math.max(200, Math.min(3500, START_PARTICLES)),
+        maxShockwaves: 80,
+        maxOverlays: 32,
+        maxBullets: 650,
+        maxEnemyBullets: 320,
+        maxEnemies: 220,
+        debugPerf: DEBUG_BY_DEFAULT
     };
 
     // --- SETUP CANVAS ---
+    const shell = document.getElementById('gameShell');
+    const viewport = document.getElementById('gameViewport');
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
     
@@ -30,8 +52,12 @@
         finalKills: document.getElementById('finalKills'),
         maxCombo: document.getElementById('maxCombo'),
         audioBtn: document.getElementById('audioToggle'),
+        volume: document.getElementById('volumeSlider'),
+        volumeValue: document.getElementById('volumeValue'),
+        deployBtn: document.getElementById('deployButton'),
         controlHint: document.getElementById('controlHint'),
-        modeBtns: Array.from(document.querySelectorAll('.mode-btn'))
+        modeBtns: Array.from(document.querySelectorAll('.mode-btn')),
+        perfDebug: document.getElementById('perfDebug')
     };
 
     // --- STATE ---
@@ -54,7 +80,18 @@
         overdriveTimer: 0,
         lastShot: 0,
         playerMode: 1,
-        difficulty: null
+        difficulty: null,
+        viewportScale: 1,
+        displayWidth: CONFIG.baseWidth,
+        displayHeight: CONFIG.baseHeight,
+        dpr: 1,
+        accumulator: 0,
+        fps: 60,
+        fpsSampleTime: 0,
+        fpsSampleFrames: 0,
+        lowQuality: false,
+        debugPerf: CONFIG.debugPerf,
+        debugTicker: 0
     };
 
     const input = {
@@ -71,9 +108,29 @@
     };
 
     const CONTROL_HINTS = {
-        1: 'P1: ARROWS MOVE + FIRE  |  NO MOUSE INPUT',
-        2: 'P1: ARROWS MOVE + FIRE  |  P2: WASD + F  |  NO MOUSE INPUT'
+        1: 'P1: ARROWS MOVE | P1 FIRE: SPACE | CLICK DEPLOY TO START',
+        2: 'P1: ARROWS + SPACE | P2: WASD + F | CLICK MODE + DEPLOY'
     };
+
+    function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    function createPool(factory, maxSize = 512) {
+        const free = [];
+        return {
+            acquire() {
+                return free.pop() || factory();
+            },
+            release(instance) {
+                if(!instance || free.length >= maxSize) return;
+                free.push(instance);
+            },
+            size() {
+                return free.length;
+            }
+        };
+    }
 
     function getDifficulty(level) {
         if(level <= 1) {
@@ -417,24 +474,62 @@
     const Audio = {
         ctx: null,
         master: null,
+        delay: null,
+        delayGain: null,
+        noiseBuffer: null,
+        initialized: false,
         enabled: true,
+        muted: false,
+        volume: CONFIG.audioVolume,
         init() {
+            if(this.initialized) return;
             const AC = window.AudioContext || window.webkitAudioContext;
             if(!AC) return;
             this.ctx = new AC();
             this.master = this.ctx.createGain();
-            this.master.gain.value = CONFIG.audioVolume;
+            this.master.gain.value = this.muted ? 0 : this.volume;
             this.master.connect(this.ctx.destination);
-            
+
             this.delay = this.ctx.createDelay();
             this.delay.delayTime.value = 0.15;
             this.delayGain = this.ctx.createGain();
             this.delayGain.gain.value = 0.25;
             this.delay.connect(this.delayGain);
             this.delayGain.connect(this.master);
+            this.noiseBuffer = this.createNoiseBuffer(1.2);
+            this.initialized = true;
+        },
+        createNoiseBuffer(seconds = 1) {
+            if(!this.ctx) return null;
+            const bufferSize = Math.floor(this.ctx.sampleRate * seconds);
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for(let i=0; i<bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            return buffer;
+        },
+        ensureRunning() {
+            if(!this.ctx) return;
+            if(this.ctx.state === 'suspended') {
+                this.ctx.resume().catch(() => {});
+            }
+        },
+        setVolume(value) {
+            this.volume = clamp(value, 0, 1);
+            if(this.master) {
+                this.master.gain.value = this.muted ? 0 : this.volume;
+            }
+        },
+        setMuted(muted) {
+            this.muted = !!muted;
+            if(this.master) {
+                this.master.gain.value = this.muted ? 0 : this.volume;
+            }
         },
         playTone(freq, type, dur, vol, slideTo = null) {
-            if(!this.enabled || !this.ctx) return;
+            if(!this.enabled || this.muted || !this.ctx) return;
+            this.ensureRunning();
             const t = this.ctx.currentTime;
             const osc = this.ctx.createOscillator();
             const gain = this.ctx.createGain();
@@ -453,29 +548,27 @@
             osc.stop(t+dur+0.1);
         },
         playNoise(dur, vol, filterFreq = 800) {
-            if(!this.enabled || !this.ctx) return;
+            if(!this.enabled || this.muted || !this.ctx || !this.noiseBuffer) return;
+            this.ensureRunning();
             const t = this.ctx.currentTime;
-            const bufSize = this.ctx.sampleRate * dur;
-            const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
-            const data = buf.getChannelData(0);
-            for(let i=0; i<bufSize; i++) data[i] = Math.random()*2-1;
-            
             const src = this.ctx.createBufferSource();
-            src.buffer = buf;
+            src.buffer = this.noiseBuffer;
+            src.loop = true;
             const gain = this.ctx.createGain();
-            
+
             const filter = this.ctx.createBiquadFilter();
             filter.type = 'lowpass';
             filter.frequency.setValueAtTime(filterFreq, t);
             filter.frequency.linearRampToValueAtTime(100, t+dur);
-            
+
             gain.gain.setValueAtTime(vol, t);
             gain.gain.exponentialRampToValueAtTime(0.01, t+dur);
-            
+
             src.connect(filter);
             filter.connect(gain);
             gain.connect(this.master);
             src.start();
+            src.stop(t + dur + 0.02);
         },
         sfx: {
             shoot: () => Audio.playTone(420, 'sawtooth', 0.1, 0.16, 110),
@@ -525,6 +618,10 @@
             overdriveStart: () => {
                 Audio.playTone(300, 'sawtooth', 0.16, 0.14, 700);
                 setTimeout(() => Audio.playTone(600, 'sine', 0.2, 0.11), 90);
+            },
+            uiClick: () => {
+                Audio.playTone(640, 'triangle', 0.07, 0.11, 980);
+                setTimeout(() => Audio.playTone(920, 'sine', 0.05, 0.08), 24);
             }
         }
     };
@@ -550,16 +647,26 @@
 
     class Particle extends Entity {
         constructor(x, y, def) {
-            super(x, y);
-            this.vx = (Math.random()-0.5) * (def.speed||100);
-            this.vy = (Math.random()-0.5) * (def.speed||100);
+            super(0, 0);
+            this.reset(x, y, def);
+        }
+        reset(x, y, def = {}) {
+            const speed = def.speed || 100;
+            this.x = x;
+            this.y = y;
+            this.vx = (Math.random() - 0.5) * speed;
+            this.vy = (Math.random() - 0.5) * speed;
             this.life = def.life || 1;
             this.maxLife = this.life;
             this.color = def.color || '#fff';
             this.size = def.size || 2;
             this.drag = def.drag || 0.95;
             this.mode = def.mode || 'normal';
-            this.glow = def.glow || false;
+            this.glow = !!def.glow;
+            this.alpha = 1;
+            this.dead = false;
+            this.rot = 0;
+            this.scale = 1;
         }
         update(dt) {
             super.update(dt);
@@ -571,21 +678,18 @@
         draw(ctx) {
             const alpha = (this.life / this.maxLife) * this.alpha;
             ctx.globalAlpha = alpha;
-            if(this.mode === 'add') ctx.globalCompositeOperation = 'lighter';
-            
+            const additive = this.mode === 'add';
+            if(additive) ctx.globalCompositeOperation = 'lighter';
             ctx.fillStyle = this.color;
-            ctx.shadowBlur = this.glow ? 15 : 0;
-            ctx.shadowColor = this.color;
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.size, 0, Math.PI*2);
             ctx.fill();
-            ctx.shadowBlur = 0;
-            
-            if(this.mode === 'add' && this.glow) {
-                ctx.globalAlpha = alpha * 0.5;
-                ctx.drawImage(Assets.glow, this.x - this.size*6, this.y - this.size*6, this.size*12, this.size*12);
+
+            if(additive && this.glow && CONFIG.bloomEnabled && !state.lowQuality && this.size >= 2) {
+                ctx.globalAlpha = alpha * 0.38;
+                const gSize = this.size * 8;
+                ctx.drawImage(Assets.glow, this.x - gSize / 2, this.y - gSize / 2, gSize, gSize);
             }
-            
             ctx.globalCompositeOperation = 'source-over';
             ctx.globalAlpha = 1;
         }
@@ -670,15 +774,15 @@
             const thrustChance = Math.abs(this.vy) > 10 ? 0.7 : 0.4;
             if(Math.random() < thrustChance) {
                 const xOff = (Math.random() - 0.5) * 35;
-                Entities.particles.push(new Particle(this.x + xOff, this.y + 35, {
+                Entities.spawnParticle(this.x + xOff, this.y + 35, {
                     color: Math.random() > 0.5 ? this.engineColorA : this.engineColorB,
                     speed: 40,
                     size: Math.random()*4 + 1,
-                    life: 0.4,
+                    life: state.lowQuality ? 0.24 : 0.4,
                     mode: 'add',
                     drag: 0.88,
-                    glow: true
-                }));
+                    glow: !state.lowQuality
+                });
             }
         }
         shoot() {
@@ -695,24 +799,24 @@
             const muzzle = { x: this.x, y: this.y - 30 };
             
             // Muzzle flash
-            const flashCount = state.overdriveTimer > 0 ? 16 : 10;
+            const flashCount = Math.floor((state.lowQuality ? 0.55 : 1) * (state.overdriveTimer > 0 ? 16 : 10));
             for(let i=0; i<flashCount; i++) {
-                Entities.particles.push(new Particle(muzzle.x, muzzle.y, {
+                Entities.spawnParticle(muzzle.x, muzzle.y, {
                     color: wep.color,
                     speed: 180,
                     size: Math.random() * 5 + 2,
-                    life: 0.24,
+                    life: state.lowQuality ? 0.14 : 0.24,
                     mode: 'add',
-                    glow: true
-                }));
+                    glow: !state.lowQuality
+                });
             }
             
             switch(this.weapon) {
                 case 'BLASTER':
-                    Entities.bullets.push(new Bullet(muzzle.x - 7, muzzle.y, -80, -1320, 2.8, wep.color, 7));
-                    Entities.bullets.push(new Bullet(muzzle.x + 7, muzzle.y, 80, -1320, 2.8, wep.color, 7));
+                    Entities.spawnBullet(muzzle.x - 7, muzzle.y, -80, -1320, 2.8, wep.color, 7);
+                    Entities.spawnBullet(muzzle.x + 7, muzzle.y, 80, -1320, 2.8, wep.color, 7);
                     if(state.overdriveTimer > 0) {
-                        Entities.bullets.push(new Bullet(muzzle.x, muzzle.y - 5, 0, -1450, 3.4, wep.color, 8));
+                        Entities.spawnBullet(muzzle.x, muzzle.y - 5, 0, -1450, 3.4, wep.color, 8);
                     }
                     Audio.sfx.shoot();
                     break;
@@ -722,36 +826,36 @@
                         const angle = i * 0.12;
                         const vx = Math.sin(angle) * 1160;
                         const vy = -Math.cos(angle) * 1160;
-                        Entities.bullets.push(new Bullet(muzzle.x, muzzle.y, vx, vy, 1.8, wep.color, 5.4));
+                        Entities.spawnBullet(muzzle.x, muzzle.y, vx, vy, 1.8, wep.color, 5.4);
                     }
                     Audio.sfx.shoot();
                     break;
                     
                 case 'PLASMA':
-                    Entities.bullets.push(new Bullet(muzzle.x, muzzle.y, 0, -860, 30, wep.color, 16, true));
+                    Entities.spawnBullet(muzzle.x, muzzle.y, 0, -860, 30, wep.color, 16, true);
                     Audio.sfx.plasma();
                     break;
                     
                 case 'LASER':
-                    Entities.bullets.push(new Bullet(muzzle.x - 12, muzzle.y, 0, -1650, 1.9, wep.color, 4.6));
-                    Entities.bullets.push(new Bullet(muzzle.x + 12, muzzle.y, 0, -1650, 1.9, wep.color, 4.6));
+                    Entities.spawnBullet(muzzle.x - 12, muzzle.y, 0, -1650, 1.9, wep.color, 4.6);
+                    Entities.spawnBullet(muzzle.x + 12, muzzle.y, 0, -1650, 1.9, wep.color, 4.6);
                     if(state.overdriveTimer > 0) {
-                        Entities.bullets.push(new Bullet(muzzle.x, muzzle.y, 0, -1750, 2.6, wep.color, 5.6));
+                        Entities.spawnBullet(muzzle.x, muzzle.y, 0, -1750, 2.6, wep.color, 5.6);
                     }
                     Audio.sfx.shootLaser();
                     break;
                     
                 case 'MISSILES':
-                    Entities.bullets.push(new Missile(muzzle.x - 14, muzzle.y, wep.color, 10));
-                    Entities.bullets.push(new Missile(muzzle.x + 14, muzzle.y, wep.color, 10));
+                    Entities.spawnMissile(muzzle.x - 14, muzzle.y, wep.color, 10);
+                    Entities.spawnMissile(muzzle.x + 14, muzzle.y, wep.color, 10);
                     if(state.overdriveTimer > 0) {
-                        Entities.bullets.push(new Missile(muzzle.x, muzzle.y - 6, wep.color, 12));
+                        Entities.spawnMissile(muzzle.x, muzzle.y - 6, wep.color, 12);
                     }
                     Audio.sfx.shootMissile();
                     break;
                     
                 case 'RAILGUN':
-                    Entities.bullets.push(new Bullet(muzzle.x, muzzle.y, 0, -2200, 44, wep.color, 11, true, true));
+                    Entities.spawnBullet(muzzle.x, muzzle.y, 0, -2200, 44, wep.color, 11, true, true);
                     // Recoil effect
                     this.vy += 100;
                     Audio.sfx.shootRailgun();
@@ -810,15 +914,22 @@
 
     class Bullet extends Entity {
         constructor(x, y, vx, vy, dmg, color, size=4, piercing=false, railgun=false) {
-            super(x, y);
+            super(0, 0);
+            this.reset(x, y, vx, vy, dmg, color, size, piercing, railgun);
+        }
+        reset(x, y, vx, vy, dmg, color, size=4, piercing=false, railgun=false) {
+            this.x = x;
+            this.y = y;
             this.vx = vx;
             this.vy = vy;
             this.damage = dmg;
             this.color = color;
             this.size = size;
-            this.piercing = piercing;
-            this.railgun = railgun;
+            this.piercing = !!piercing;
+            this.railgun = !!railgun;
             this.life = 2;
+            this.dead = false;
+            this.alpha = 1;
         }
         update(dt) {
             super.update(dt);
@@ -826,33 +937,32 @@
             if(this.life <= 0 || this.y < -50 || this.x < -50 || this.x > state.width+50) this.dead = true;
             
             // Enhanced trail
-            if(Math.random() < 0.72) {
-                Entities.particles.push(new Particle(this.x, this.y, {
+            const trailChance = state.lowQuality ? 0.32 : 0.58;
+            if(Math.random() < trailChance) {
+                Entities.spawnParticle(this.x, this.y, {
                     size: this.size * 0.72,
                     color: this.color,
-                    life: 0.34,
+                    life: state.lowQuality ? 0.18 : 0.28,
                     speed: 36,
                     mode: 'add',
-                    glow: true
-                }));
+                    glow: !state.lowQuality
+                });
             }
             
             // Railgun trail is extra thick
-            if(this.railgun && Math.random() < 0.8) {
-                Entities.particles.push(new Particle(this.x + (Math.random()-0.5)*15, this.y, {
+            if(this.railgun && Math.random() < (state.lowQuality ? 0.35 : 0.6)) {
+                Entities.spawnParticle(this.x + (Math.random()-0.5)*15, this.y, {
                     size: this.size * 1.05,
                     color: this.color,
-                    life: 0.48,
+                    life: state.lowQuality ? 0.26 : 0.42,
                     speed: 10,
                     mode: 'add',
-                    glow: true
-                }));
+                    glow: !state.lowQuality
+                });
             }
         }
         draw(ctx) {
             ctx.globalCompositeOperation = 'lighter';
-            ctx.shadowBlur = 20;
-            ctx.shadowColor = this.color;
             ctx.fillStyle = this.color;
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.size, 0, Math.PI*2);
@@ -867,12 +977,13 @@
             ctx.moveTo(this.x, this.y);
             ctx.lineTo(this.x - Math.cos(angle) * trailLen, this.y - Math.sin(angle) * trailLen);
             ctx.stroke();
-
-            ctx.shadowBlur = 0;
             
             // Glow
-            ctx.globalAlpha = 0.8;
-            ctx.drawImage(Assets.glow, this.x-this.size*10, this.y-this.size*10, this.size*20, this.size*20);
+            if(CONFIG.bloomEnabled && !state.lowQuality) {
+                ctx.globalAlpha = 0.62;
+                const gSize = this.size * 14;
+                ctx.drawImage(Assets.glow, this.x - gSize / 2, this.y - gSize / 2, gSize, gSize);
+            }
             ctx.globalAlpha = 1;
             ctx.globalCompositeOperation = 'source-over';
         }
@@ -880,7 +991,12 @@
 
     class Missile extends Entity {
         constructor(x, y, color, damage = 10) {
-            super(x, y);
+            super(0, 0);
+            this.reset(x, y, color, damage);
+        }
+        reset(x, y, color, damage = 10) {
+            this.x = x;
+            this.y = y;
             this.vx = (Math.random()-0.5) * 100;
             this.vy = -600;
             this.damage = damage;
@@ -888,6 +1004,7 @@
             this.size = 6.5;
             this.target = null;
             this.life = 3;
+            this.dead = false;
         }
         update(dt) {
             // Homing behavior
@@ -927,21 +1044,19 @@
             if(this.life <= 0 || this.y < -50 || this.x < -50 || this.x > state.width+50) this.dead = true;
             
             // Smoke trail
-            if(Math.random() < 0.6) {
-                Entities.particles.push(new Particle(this.x, this.y, {
+            if(Math.random() < (state.lowQuality ? 0.35 : 0.55)) {
+                Entities.spawnParticle(this.x, this.y, {
                     size: 4,
                     color: this.color,
-                    life: 0.62,
+                    life: state.lowQuality ? 0.34 : 0.62,
                     speed: 38,
                     mode: 'add',
-                    glow: true
-                }));
+                    glow: !state.lowQuality
+                });
             }
         }
         draw(ctx) {
             ctx.globalCompositeOperation = 'lighter';
-            ctx.shadowBlur = 16;
-            ctx.shadowColor = this.color;
             ctx.fillStyle = this.color;
             ctx.save();
             ctx.translate(this.x, this.y);
@@ -950,14 +1065,18 @@
             ctx.fillStyle = '#fff6b0';
             ctx.fillRect(-1.4, 8, 2.8, 6);
             ctx.restore();
-            ctx.shadowBlur = 0;
             ctx.globalCompositeOperation = 'source-over';
         }
     }
 
     class EnemyBolt extends Entity {
         constructor(x, y, tx, ty, damage = 20, bulletScale = 1) {
-            super(x, y);
+            super(0, 0);
+            this.reset(x, y, tx, ty, damage, bulletScale);
+        }
+        reset(x, y, tx, ty, damage = 20, bulletScale = 1) {
+            this.x = x;
+            this.y = y;
             const dx = tx - x;
             const dy = ty - y;
             const len = Math.max(1, Math.hypot(dx, dy));
@@ -968,6 +1087,7 @@
             this.damage = damage;
             this.life = 4;
             this.color = '#ff6077';
+            this.dead = false;
         }
         update(dt) {
             super.update(dt);
@@ -975,33 +1095,35 @@
             if(this.life <= 0 || this.y > state.height + 80 || this.x < -80 || this.x > state.width + 80) {
                 this.dead = true;
             }
-            if(Math.random() < 0.45) {
-                Entities.particles.push(new Particle(this.x, this.y, {
+            if(Math.random() < (state.lowQuality ? 0.2 : 0.4)) {
+                Entities.spawnParticle(this.x, this.y, {
                     size: 2.4,
                     color: '#ff6d88',
                     life: 0.22,
                     speed: 18,
                     mode: 'add',
-                    glow: true
-                }));
+                    glow: !state.lowQuality
+                });
             }
         }
         draw(ctx) {
             ctx.globalCompositeOperation = 'lighter';
-            ctx.shadowBlur = 14;
-            ctx.shadowColor = this.color;
             ctx.fillStyle = this.color;
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
             ctx.fill();
-            ctx.shadowBlur = 0;
             ctx.globalCompositeOperation = 'source-over';
         }
     }
 
     class Drone extends Entity {
         constructor(x, y) {
-            super(x, y);
+            super(0, 0);
+            this.reset(x, y);
+        }
+        reset(x, y) {
+            this.x = x;
+            this.y = y;
             const diff = state.difficulty || getDifficulty(state.wave);
             this.r = 22;
             this.w = 48;
@@ -1016,6 +1138,7 @@
             this.aiLead = diff.aiLead;
             this.shotDamage = 22 * diff.enemyDamage;
             this.bulletScale = diff.enemyBulletSpeed;
+            this.dead = false;
         }
         update(dt) {
             this.sway += dt * 2.4;
@@ -1043,7 +1166,7 @@
                     const leadTime = 0.2 + this.aiLead * 0.35;
                     const tx = p.x + p.vx * leadTime;
                     const ty = p.y + p.vy * leadTime;
-                    Entities.enemyBullets.push(new EnemyBolt(this.x, this.y + 10, tx, ty, this.shotDamage, this.bulletScale));
+                    Entities.spawnEnemyBolt(this.x, this.y + 10, tx, ty, this.shotDamage, this.bulletScale);
                     Audio.sfx.enemyShot();
                 }
                 const fireBase = Math.max(0.5, 1.8 - state.wave * 0.03) + Math.random() * 0.9;
@@ -1070,20 +1193,20 @@
                 if(Math.random() < 0.38) {
                     const utility = Math.random();
                     const utilType = utility < 0.34 ? 'SHIELD' : utility < 0.68 ? 'COOLANT' : 'OVERDRIVE';
-                    Entities.spawns.push(new Powerup(this.x, this.y, utilType, true));
+                    Entities.spawnPowerup(this.x, this.y, utilType, true);
                 }
             } else {
                 Audio.sfx.hit();
                 state.shake += 0.8;
                 for(let i=0; i<10; i++) {
-                    Entities.particles.push(new Particle(this.x, this.y, {
+                    Entities.spawnParticle(this.x, this.y, {
                         color: '#8fb7de',
                         size: 3.2,
                         speed: 160,
                         life: 0.5,
                         mode: 'add',
-                        glow: true
-                    }));
+                        glow: !state.lowQuality
+                    });
                 }
             }
         }
@@ -1133,7 +1256,12 @@
 
     class Asteroid extends Entity {
         constructor(x, y, sizeClass, type = 'normal') {
-            super(x, y);
+            super(0, 0);
+            this.reset(x, y, sizeClass, type);
+        }
+        reset(x, y, sizeClass, type = 'normal') {
+            this.x = x;
+            this.y = y;
             const diff = state.difficulty || getDifficulty(state.wave);
             this.sizeClass = sizeClass;
             this.type = type;
@@ -1152,6 +1280,7 @@
             const sizePrefix = sizeClass === 1 ? 'asteroidSmall' : (sizeClass === 2 ? 'asteroidMed' : 'asteroidLarge');
             const typeSuffix = type === 'crystal' ? 'Crystal' : (type === 'metal' ? 'Metal' : '');
             this.img = Assets[sizePrefix + typeSuffix];
+            this.dead = false;
         }
         update(dt) {
             super.update(dt);
@@ -1182,21 +1311,21 @@
                 const chance = this.type === 'crystal' ? 0.2 : (this.type === 'metal' ? 0.16 : 0.09);
                 if(Math.random() < chance) {
                     const forceUtility = Math.random() < (this.type === 'metal' ? 0.5 : 0.25);
-                    Entities.spawns.push(new Powerup(this.x, this.y, null, forceUtility));
+                    Entities.spawnPowerup(this.x, this.y, null, forceUtility);
                 }
             } else {
                 Audio.sfx.hit();
                 // Hit particles
                 const color = this.type === 'crystal' ? '#9db4cc' : (this.type === 'metal' ? '#8a8680' : '#8a7a6a');
                 for(let i=0; i<9; i++) {
-                    Entities.particles.push(new Particle(this.x, this.y, {
+                    Entities.spawnParticle(this.x, this.y, {
                         color: color,
                         size: 3.6,
                         speed: 130,
                         life: 0.62,
                         mode: 'add',
-                        glow: true
-                    }));
+                        glow: !state.lowQuality
+                    });
                 }
             }
         }
@@ -1233,7 +1362,12 @@
 
     class Powerup extends Entity {
         constructor(x, y, utilityType = null, forceUtility = false) {
-            super(x, y);
+            super(0, 0);
+            this.reset(x, y, utilityType, forceUtility);
+        }
+        reset(x, y, utilityType = null, forceUtility = false) {
+            this.x = x;
+            this.y = y;
             this.vy = 80;
             this.r = 18;
             this.isUtility = false;
@@ -1252,6 +1386,7 @@
                 this.icon = WEAPONS[this.type].icon;
             }
             this.bobOffset = Math.random() * Math.PI * 2;
+            this.dead = false;
         }
         update(dt) {
             super.update(dt);
@@ -1290,10 +1425,10 @@
             ctx.restore();
             
             // Rotating particles
-            if(Math.random() < 0.3) {
+            if(Math.random() < (state.lowQuality ? 0.12 : 0.22)) {
                 const angle = Math.random() * Math.PI * 2;
                 const dist = 25;
-                Entities.particles.push(new Particle(
+                Entities.spawnParticle(
                     this.x + Math.cos(angle) * dist,
                     this.y + Math.sin(angle) * dist + bob,
                     {
@@ -1302,21 +1437,27 @@
                         speed: 20,
                         life: 0.5,
                         mode: 'add',
-                        glow: true
+                        glow: !state.lowQuality
                     }
-                ));
+                );
             }
         }
     }
 
     class Shockwave extends Entity {
         constructor(x, y, radius, life, color) {
-            super(x, y);
+            super(0, 0);
+            this.reset(x, y, radius, life, color);
+        }
+        reset(x, y, radius, life, color) {
+            this.x = x;
+            this.y = y;
             this.radius = radius;
             this.maxRadius = radius * 2.1;
             this.life = life;
             this.maxLife = life;
             this.color = color;
+            this.dead = false;
         }
         update(dt) {
             this.life -= dt;
@@ -1343,17 +1484,37 @@
         }
     }
 
+    class OverlayFlash {
+        constructor(duration, color) {
+            this.reset(duration, color);
+        }
+        reset(duration, color) {
+            this.t = duration;
+            this.color = color;
+            this.dead = false;
+        }
+        update(dt) {
+            this.t -= dt;
+            if(this.t <= 0) this.dead = true;
+        }
+        draw(ctx) {
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.fillStyle = this.color;
+            ctx.fillRect(-20, -20, state.width + 40, state.height + 40);
+            ctx.globalCompositeOperation = 'source-over';
+        }
+    }
+
     // --- STARFIELD ---
     class Starfield {
         constructor() {
             this.stars = [];
-            for(let i=0; i<150; i++) {
+            for(let i=0; i<100; i++) {
                 this.stars.push({
                     x: Math.random() * state.width,
                     y: Math.random() * state.height,
                     z: Math.random() * 3,
-                    size: Math.random() * 2 + 0.5,
-                    hue: Math.random() * 360
+                    size: Math.random() * 1.8 + 0.4
                 });
             }
         }
@@ -1370,26 +1531,82 @@
             for(const star of this.stars) {
                 const alpha = 0.3 + (star.z / 3) * 0.6;
                 ctx.globalAlpha = alpha;
-                const hue = (star.hue + state.t * (8 + star.z * 10)) % 360;
-                ctx.fillStyle = `hsla(${hue.toFixed(1)}, 90%, 78%, 1)`;
-                
-                if(star.z > 2) {
-                    // Bright stars get a glow
-                    ctx.globalCompositeOperation = 'lighter';
-                    ctx.shadowBlur = 4;
-                    ctx.shadowColor = `hsla(${hue.toFixed(1)}, 95%, 80%, 1)`;
-                }
-                
-                ctx.beginPath();
-                ctx.arc(star.x, star.y, star.size, 0, Math.PI*2);
-                ctx.fill();
-                
-                ctx.globalCompositeOperation = 'source-over';
-                ctx.shadowBlur = 0;
+                ctx.fillStyle = star.z > 2 ? '#f4fbff' : '#b8e7ff';
+                ctx.fillRect(star.x, star.y, star.size, star.size);
             }
             ctx.globalAlpha = 1;
         }
     }
+
+    const RenderCache = {
+        bg: null,
+        vignette: null,
+        build() {
+            const w = state.width;
+            const h = state.height;
+            if(!w || !h) return;
+
+            const bg = document.createElement('canvas');
+            bg.width = w;
+            bg.height = h;
+            const bctx = bg.getContext('2d');
+
+            const gradient = bctx.createLinearGradient(0, 0, w, h);
+            gradient.addColorStop(0, '#040b1f');
+            gradient.addColorStop(0.5, '#091633');
+            gradient.addColorStop(1, '#040914');
+            bctx.fillStyle = gradient;
+            bctx.fillRect(0, 0, w, h);
+
+            const nebulaA = bctx.createRadialGradient(w * 0.18, h * 0.28, 30, w * 0.18, h * 0.28, w * 0.6);
+            nebulaA.addColorStop(0, 'rgba(255, 96, 190, 0.16)');
+            nebulaA.addColorStop(0.7, 'rgba(81, 171, 255, 0.08)');
+            nebulaA.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            bctx.fillStyle = nebulaA;
+            bctx.fillRect(0, 0, w, h);
+
+            const nebulaB = bctx.createRadialGradient(w * 0.78, h * 0.74, 20, w * 0.78, h * 0.74, w * 0.52);
+            nebulaB.addColorStop(0, 'rgba(120, 254, 180, 0.11)');
+            nebulaB.addColorStop(0.7, 'rgba(101, 106, 255, 0.08)');
+            nebulaB.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            bctx.fillStyle = nebulaB;
+            bctx.fillRect(0, 0, w, h);
+
+            for(let i=0; i<160; i++) {
+                const alpha = 0.08 + Math.random() * 0.25;
+                const x = Math.random() * w;
+                const y = Math.random() * h;
+                const s = Math.random() * 1.8 + 0.3;
+                bctx.fillStyle = `rgba(201, 233, 255, ${alpha.toFixed(3)})`;
+                bctx.fillRect(x, y, s, s);
+            }
+
+            const vignette = document.createElement('canvas');
+            vignette.width = w;
+            vignette.height = h;
+            const vctx = vignette.getContext('2d');
+            const vg = vctx.createRadialGradient(w / 2, h / 2, h * 0.34, w / 2, h / 2, h * 0.75);
+            vg.addColorStop(0, 'rgba(0, 0, 0, 0)');
+            vg.addColorStop(1, 'rgba(0, 0, 0, 0.68)');
+            vctx.fillStyle = vg;
+            vctx.fillRect(0, 0, w, h);
+
+            this.bg = bg;
+            this.vignette = vignette;
+        }
+    };
+
+    const Pools = {
+        particle: createPool(() => new Particle(0, 0, {}), 2800),
+        bullet: createPool(() => new Bullet(0, 0, 0, 0, 1, '#fff'), 1400),
+        missile: createPool(() => new Missile(0, 0, '#fff', 1), 480),
+        enemyBolt: createPool(() => new EnemyBolt(0, 0, 0, 0), 900),
+        asteroid: createPool(() => new Asteroid(0, 0, 1, 'normal'), 520),
+        drone: createPool(() => new Drone(0, 0), 140),
+        powerup: createPool(() => new Powerup(0, 0), 180),
+        shockwave: createPool(() => new Shockwave(0, 0, 10, 0.3, '#fff'), 180),
+        overlay: createPool(() => new OverlayFlash(0.1, 'rgba(255,255,255,0.1)'), 64)
+    };
 
     // --- GAME MANAGER ---
     const Entities = {
@@ -1402,8 +1619,38 @@
         overlays: [],
         shockwaves: [],
         starfield: null,
+
+        releaseArray(list, pool) {
+            for(const item of list) {
+                pool.release(item);
+            }
+        },
+
+        releaseBullets(list) {
+            for(const bullet of list) {
+                if(bullet instanceof Missile) {
+                    Pools.missile.release(bullet);
+                } else {
+                    Pools.bullet.release(bullet);
+                }
+            }
+        },
         
         clear(playerMode = state.playerMode) {
+            this.releaseBullets(this.bullets);
+            this.releaseArray(this.enemyBullets, Pools.enemyBolt);
+            for(const enemy of this.enemies) {
+                if(enemy instanceof Drone) {
+                    Pools.drone.release(enemy);
+                } else if(enemy instanceof Asteroid) {
+                    Pools.asteroid.release(enemy);
+                }
+            }
+            this.releaseArray(this.particles, Pools.particle);
+            this.releaseArray(this.spawns, Pools.powerup);
+            this.releaseArray(this.shockwaves, Pools.shockwave);
+            this.releaseArray(this.overlays, Pools.overlay);
+
             this.players = [new Player(0)];
             if(playerMode === 2) {
                 this.players.push(new Player(1));
@@ -1416,6 +1663,127 @@
             this.overlays = [];
             this.shockwaves = [];
             this.starfield = new Starfield();
+            RenderCache.build();
+        },
+
+        spawnParticle(x, y, def) {
+            if(this.particles.length >= CONFIG.maxParticles) {
+                return null;
+            }
+            const particle = Pools.particle.acquire();
+            particle.reset(x, y, def);
+            this.particles.push(particle);
+            return particle;
+        },
+
+        spawnBullet(x, y, vx, vy, dmg, color, size=4, piercing=false, railgun=false) {
+            if(this.bullets.length >= CONFIG.maxBullets) return null;
+            const bullet = Pools.bullet.acquire();
+            bullet.reset(x, y, vx, vy, dmg, color, size, piercing, railgun);
+            this.bullets.push(bullet);
+            return bullet;
+        },
+
+        spawnMissile(x, y, color, damage = 10) {
+            if(this.bullets.length >= CONFIG.maxBullets) return null;
+            const missile = Pools.missile.acquire();
+            missile.reset(x, y, color, damage);
+            this.bullets.push(missile);
+            return missile;
+        },
+
+        spawnEnemyBolt(x, y, tx, ty, damage = 20, bulletScale = 1) {
+            if(this.enemyBullets.length >= CONFIG.maxEnemyBullets) return null;
+            const bolt = Pools.enemyBolt.acquire();
+            bolt.reset(x, y, tx, ty, damage, bulletScale);
+            this.enemyBullets.push(bolt);
+            return bolt;
+        },
+
+        spawnAsteroid(x, y, sizeClass, type = 'normal') {
+            if(this.enemies.length >= CONFIG.maxEnemies) return null;
+            const asteroid = Pools.asteroid.acquire();
+            asteroid.reset(x, y, sizeClass, type);
+            this.enemies.push(asteroid);
+            return asteroid;
+        },
+
+        spawnDrone(x, y) {
+            if(this.enemies.length >= CONFIG.maxEnemies) return null;
+            const drone = Pools.drone.acquire();
+            drone.reset(x, y);
+            this.enemies.push(drone);
+            return drone;
+        },
+
+        spawnPowerup(x, y, utilityType = null, forceUtility = false) {
+            const powerup = Pools.powerup.acquire();
+            powerup.reset(x, y, utilityType, forceUtility);
+            this.spawns.push(powerup);
+            return powerup;
+        },
+
+        spawnShockwave(x, y, radius, life, color) {
+            if(this.shockwaves.length >= CONFIG.maxShockwaves) return null;
+            const shockwave = Pools.shockwave.acquire();
+            shockwave.reset(x, y, radius, life, color);
+            this.shockwaves.push(shockwave);
+            return shockwave;
+        },
+
+        spawnOverlay(duration, color) {
+            if(this.overlays.length >= CONFIG.maxOverlays) return null;
+            const overlay = Pools.overlay.acquire();
+            overlay.reset(duration, color);
+            this.overlays.push(overlay);
+            return overlay;
+        },
+
+        compact(list, pool) {
+            let write = 0;
+            for(let i=0; i<list.length; i++) {
+                const item = list[i];
+                if(item.dead) {
+                    pool.release(item);
+                } else {
+                    list[write++] = item;
+                }
+            }
+            list.length = write;
+        },
+
+        compactBullets() {
+            let write = 0;
+            for(let i=0; i<this.bullets.length; i++) {
+                const bullet = this.bullets[i];
+                if(bullet.dead) {
+                    if(bullet instanceof Missile) {
+                        Pools.missile.release(bullet);
+                    } else {
+                        Pools.bullet.release(bullet);
+                    }
+                } else {
+                    this.bullets[write++] = bullet;
+                }
+            }
+            this.bullets.length = write;
+        },
+
+        compactEnemies() {
+            let write = 0;
+            for(let i=0; i<this.enemies.length; i++) {
+                const enemy = this.enemies[i];
+                if(enemy.dead) {
+                    if(enemy instanceof Drone) {
+                        Pools.drone.release(enemy);
+                    } else if(enemy instanceof Asteroid) {
+                        Pools.asteroid.release(enemy);
+                    }
+                } else {
+                    this.enemies[write++] = enemy;
+                }
+            }
+            this.enemies.length = write;
         },
 
         alivePlayers() {
@@ -1438,52 +1806,50 @@
         },
 
         spawnImpact(x, y, color = '#ffffff', scale = 1) {
-            const count = 8 + Math.floor(scale * 6);
+            const count = Math.floor((state.lowQuality ? 0.55 : 1) * (8 + scale * 6));
             for(let i=0; i<count; i++) {
-                this.particles.push(new Particle(x, y, {
+                this.spawnParticle(x, y, {
                     color: color,
                     size: Math.random() * 3.6 + 1.6 * scale,
                     speed: 110 + Math.random() * 140 * scale,
                     life: 0.28 + Math.random() * 0.25,
                     drag: 0.9,
                     mode: 'add',
-                    glow: true
-                }));
+                    glow: !state.lowQuality
+                });
             }
             if(scale > 1.1) {
-                this.shockwaves.push(new Shockwave(x, y, 12 * scale, 0.22 + scale * 0.05, 'rgba(255,255,255,0.9)'));
+                this.spawnShockwave(x, y, 12 * scale, 0.22 + scale * 0.05, 'rgba(255,255,255,0.9)');
             }
         },
 
         spawnExplosion(x, y, intensity = 1, palette = ['#ffd38a', '#ff8a52', '#ffffff']) {
-            const burstCount = Math.floor(30 + intensity * 20);
-            const debrisCount = Math.floor(18 + intensity * 18);
+            const quality = state.lowQuality ? 0.56 : 1;
+            const burstCount = Math.floor((30 + intensity * 20) * quality);
+            const debrisCount = Math.floor((18 + intensity * 18) * quality);
             for(let i=0; i<burstCount; i++) {
-                this.particles.push(new Particle(x, y, {
+                this.spawnParticle(x, y, {
                     color: palette[Math.floor(Math.random() * palette.length)],
                     size: Math.random() * (4.2 + intensity * 2.8) + 2,
                     speed: 220 + Math.random() * (220 + intensity * 90),
                     life: 0.65 + Math.random() * 0.8 + intensity * 0.15,
                     drag: 0.9,
                     mode: 'add',
-                    glow: true
-                }));
+                    glow: !state.lowQuality
+                });
             }
             for(let i=0; i<debrisCount; i++) {
-                this.particles.push(new Particle(x, y, {
+                this.spawnParticle(x, y, {
                     color: palette[Math.floor(Math.random() * palette.length)],
                     size: Math.random() * 3.2 + 1.4,
                     speed: 160 + Math.random() * (180 + intensity * 80),
                     life: 0.75 + Math.random() * 0.9,
                     drag: 0.94
-                }));
+                });
             }
-            this.shockwaves.push(new Shockwave(x, y, 24 + intensity * 14, 0.35 + intensity * 0.11, 'rgba(255, 231, 180, 0.95)'));
-            this.shockwaves.push(new Shockwave(x, y, 16 + intensity * 10, 0.25 + intensity * 0.08, 'rgba(140, 220, 255, 0.75)'));
-            this.overlays.push({
-                t: 0.1 + intensity * 0.07,
-                color: `rgba(255, 190, 120, ${Math.min(0.26, 0.1 + intensity * 0.05).toFixed(3)})`
-            });
+            this.spawnShockwave(x, y, 24 + intensity * 14, 0.35 + intensity * 0.11, 'rgba(255, 231, 180, 0.95)');
+            this.spawnShockwave(x, y, 16 + intensity * 10, 0.25 + intensity * 0.08, 'rgba(140, 220, 255, 0.75)');
+            this.spawnOverlay(0.1 + intensity * 0.07, `rgba(255, 190, 120, ${Math.min(0.26, 0.1 + intensity * 0.05).toFixed(3)})`);
             state.shake += 6 + intensity * 7;
             Audio.sfx.bigExplosion(intensity);
         },
@@ -1555,6 +1921,7 @@
             this.particles.forEach(e => e.update(dt));
             this.spawns.forEach(e => e.update(dt));
             this.shockwaves.forEach(e => e.update(dt));
+            this.overlays.forEach(e => e.update(dt));
             
             // Combo decay
             if(state.comboTimer > 0) {
@@ -1582,7 +1949,7 @@
                                     other.takeDamage(b.damage * 0.28);
                                 }
                             }
-                            this.shockwaves.push(new Shockwave(b.x, b.y, 10 + b.size * 0.8, 0.2, 'rgba(255, 236, 160, 0.9)'));
+                            this.spawnShockwave(b.x, b.y, 10 + b.size * 0.8, 0.2, 'rgba(255, 236, 160, 0.9)');
                         }
                         e.takeDamage(b.damage);
                         if(!b.piercing) b.dead = true;
@@ -1659,30 +2026,33 @@
                         setTimeout(() => ui.status.innerText = "READY", 2000);
                         const pickupColor = pup.color || '#ffffff';
                         for(let i=0; i<20; i++) {
-                            this.particles.push(new Particle(pup.x, pup.y, {
+                            this.spawnParticle(pup.x, pup.y, {
                                 color: pickupColor,
                                 size: 3,
                                 speed: 150,
                                 life: 0.8,
                                 mode: 'add',
-                                glow: true
-                            }));
+                                glow: !state.lowQuality
+                            });
                         }
                     }
                 }
             }
 
             // Cleanup
-            this.bullets = this.bullets.filter(e => !e.dead);
-            this.enemyBullets = this.enemyBullets.filter(e => !e.dead);
-            this.enemies = this.enemies.filter(e => !e.dead);
-            this.particles = this.particles.filter(e => !e.dead);
-            this.spawns = this.spawns.filter(e => !e.dead);
-            this.shockwaves = this.shockwaves.filter(e => !e.dead);
+            this.compactBullets();
+            this.compact(this.enemyBullets, Pools.enemyBolt);
+            this.compactEnemies();
+            this.compact(this.particles, Pools.particle);
+            this.compact(this.spawns, Pools.powerup);
+            this.compact(this.shockwaves, Pools.shockwave);
+            this.compact(this.overlays, Pools.overlay);
         },
 
         draw(ctx) {
-            this.starfield.draw(ctx);
+            if(this.starfield) {
+                this.starfield.draw(ctx);
+            }
             this.spawns.forEach(e => e.draw(ctx));
             this.enemies.forEach(e => e.draw(ctx));
             this.enemyBullets.forEach(e => e.draw(ctx));
@@ -1697,17 +2067,115 @@
     let lastTime = 0;
     let spawnTimer = 0;
     let droneSpawnTimer = 0;
+    function updateHud() {
+        ui.score.innerText = Math.floor(state.score);
+        ui.kills.innerText = state.kills;
+        ui.wave.innerText = state.wave;
+        ui.combo.innerText = 'x' + state.combo.toFixed(1);
+        ui.comboChip.classList.toggle('hot', state.combo >= 4);
+        ui.shield.classList.toggle('active', state.shield > 0);
 
-    function loop(now) {
-        requestAnimationFrame(loop);
-        const dtMs = now - lastTime;
-        lastTime = now;
-        let dt = dtMs / 1000;
-        if(dt > 0.1) dt = 0.1;
+        const p1 = Entities.players[0];
+        const p2 = Entities.players[1];
+        const hull1 = p1 ? Math.floor((p1.hp / p1.maxHp) * 100) : 0;
+        const hull2 = p2 ? Math.floor((p2.hp / p2.maxHp) * 100) : 0;
+        ui.shield.innerText = state.playerMode === 2
+            ? `S${state.shield} | L${state.teamLives} | H${hull1}%/${hull2}%`
+            : `S${state.shield} | L${state.teamLives} | H${hull1}%`;
 
+        const heat1 = p1 ? Math.floor(p1.heat) : 0;
+        const heat2 = p2 ? Math.floor(p2.heat) : 0;
+        const heatPercent = state.playerMode === 2 ? Math.floor((heat1 + heat2) / 2) : heat1;
+        ui.heat.innerText = state.playerMode === 2
+            ? `P1 ${heat1}% | P2 ${heat2}%`
+            : `P1 ${heat1}%`;
+        ui.heatBar.style.width = heatPercent + '%';
+
+        const alivePlayers = Entities.alivePlayers();
+        if(alivePlayers.length > 0) {
+            if(state.playerMode === 2 && p1 && p2) {
+                ui.weapon.innerText = `P1 ${WEAPONS[p1.weapon].icon} · P2 ${WEAPONS[p2.weapon].icon}`;
+                ui.weaponIcon.innerText = alivePlayers.length === 2 ? '⚔' : '⚡';
+                ui.weaponIcon.style.filter = alivePlayers.length === 2
+                    ? 'drop-shadow(0 0 10px #9bffe4)'
+                    : 'drop-shadow(0 0 8px #ff7ee9)';
+            } else if(p1) {
+                const wep = WEAPONS[p1.weapon];
+                ui.weapon.innerText = wep.name;
+                ui.weaponIcon.innerText = wep.icon;
+                ui.weaponIcon.style.filter = `drop-shadow(0 0 8px ${wep.color})`;
+            }
+        }
+
+        if((p1 && p1.overheated) || (p2 && p2.overheated)) {
+            ui.heat.className = 'value critical';
+            ui.heatBar.className = 'heat-bar critical';
+        } else if(heatPercent > 70) {
+            ui.heat.className = 'value warning';
+            ui.heatBar.className = 'heat-bar warning';
+        } else {
+            ui.heat.className = 'value';
+            ui.heatBar.className = 'heat-bar';
+        }
+
+        ui.status.classList.remove('overdrive', 'alert');
+        const criticalHull = hull1 < 26 || (state.playerMode === 2 && hull2 < 26);
+        if((Entities.alivePlayers().length <= 1 && state.teamLives <= 2) || criticalHull) {
+            ui.status.innerText = "CRITICAL: LAST CHANCE";
+            ui.status.classList.add('alert');
+        } else if((p1 && p1.overheated) || (p2 && p2.overheated)) {
+            ui.status.innerText = "WEAPON OVERHEATED";
+            ui.status.classList.add('alert');
+        } else if(state.overdriveTimer > 0) {
+            ui.status.innerText = "OVERDRIVE " + state.overdriveTimer.toFixed(1) + "s";
+            ui.status.classList.add('overdrive');
+        } else {
+            ui.status.innerText = state.difficulty ? state.difficulty.label : ("LEVEL " + state.wave + " ACTIVE");
+        }
+    }
+
+    function updatePerf(dt) {
+        state.fpsSampleTime += dt;
+        state.fpsSampleFrames++;
+        if(state.fpsSampleTime >= 0.5) {
+            state.fps = state.fpsSampleFrames / state.fpsSampleTime;
+            state.fpsSampleTime = 0;
+            state.fpsSampleFrames = 0;
+
+            if(!state.lowQuality && state.fps < 50) {
+                state.lowQuality = true;
+                CONFIG.bloomEnabled = false;
+                CONFIG.renderScale = CONFIG.adaptiveRenderScale;
+                resize();
+            } else if(state.lowQuality && state.fps > 57) {
+                state.lowQuality = false;
+                CONFIG.bloomEnabled = BLOOM_ALLOWED;
+                CONFIG.renderScale = 1.0;
+                resize();
+            }
+        }
+    }
+
+    function updateDebugOverlay(dt) {
+        if(!state.debugPerf || !ui.perfDebug) return;
+        state.debugTicker += dt;
+        if(state.debugTicker < 0.25) return;
+        state.debugTicker = 0;
+        ui.perfDebug.classList.remove('hidden');
+        const enemies = Entities.enemies.length;
+        const bullets = Entities.bullets.length;
+        const enemyBullets = Entities.enemyBullets.length;
+        const particles = Entities.particles.length;
+        ui.perfDebug.innerText =
+            `FPS ${state.fps.toFixed(1)}\\n` +
+            `Q ${state.lowQuality ? 'LOW' : 'HIGH'}\\n` +
+            `EN ${enemies}  BL ${bullets}\\n` +
+            `EB ${enemyBullets}  PT ${particles}`;
+    }
+
+    function updateGame(dt) {
         state.t += dt;
 
-        // Hit Stop
         if(state.hitStop > 0) {
             state.hitStop--;
             return;
@@ -1717,11 +2185,11 @@
             state.wave = 1 + Math.floor(state.score / 2600);
             state.difficulty = getDifficulty(state.wave);
             const difficulty = state.difficulty;
+
             if(state.overdriveTimer > 0) {
                 state.overdriveTimer = Math.max(0, state.overdriveTimer - dt);
             }
 
-            // Enemy spawning
             spawnTimer += dt;
             const spawnRate = Math.max(0.28, difficulty.spawnInterval - state.score / 22000);
             if(spawnTimer > spawnRate) {
@@ -1748,8 +2216,7 @@
                     } else if(typeRoll > (0.54 - crystalBoost)) {
                         type = 'crystal';
                     }
-
-                    Entities.enemies.push(new Asteroid(Math.random() * state.width, -80 - Math.random() * 50, size, type));
+                    Entities.spawnAsteroid(Math.random() * state.width, -80 - Math.random() * 50, size, type);
                 }
             }
 
@@ -1760,107 +2227,58 @@
                 if(Entities.enemies.filter(e => e instanceof Drone).length < difficulty.droneCap) {
                     const side = Math.random() < 0.5 ? -40 : state.width + 40;
                     const y = 90 + Math.random() * (state.height * 0.3);
-                    Entities.enemies.push(new Drone(side, y));
+                    Entities.spawnDrone(side, y);
                 }
             }
 
             Entities.update(dt);
-            
-            // Update UI
-            ui.score.innerText = Math.floor(state.score);
-            ui.kills.innerText = state.kills;
-            ui.wave.innerText = state.wave;
-            ui.combo.innerText = 'x' + state.combo.toFixed(1);
-            ui.comboChip.classList.toggle('hot', state.combo >= 4);
-            ui.shield.classList.toggle('active', state.shield > 0);
-            
-            const p1 = Entities.players[0];
-            const p2 = Entities.players[1];
-            const hull1 = p1 ? Math.floor((p1.hp / p1.maxHp) * 100) : 0;
-            const hull2 = p2 ? Math.floor((p2.hp / p2.maxHp) * 100) : 0;
-            ui.shield.innerText = state.playerMode === 2
-                ? `S${state.shield} | L${state.teamLives} | H${hull1}%/${hull2}%`
-                : `S${state.shield} | L${state.teamLives} | H${hull1}%`;
+            updateHud();
+        }
+    }
 
-            const heat1 = p1 ? Math.floor(p1.heat) : 0;
-            const heat2 = p2 ? Math.floor(p2.heat) : 0;
-            const heatPercent = state.playerMode === 2 ? Math.floor((heat1 + heat2) / 2) : heat1;
-            ui.heat.innerText = state.playerMode === 2
-                ? `P1 ${heat1}% | P2 ${heat2}%`
-                : `P1 ${heat1}%`;
-            ui.heatBar.style.width = heatPercent + '%';
-
-            const alivePlayers = Entities.alivePlayers();
-            if(alivePlayers.length > 0) {
-                if(state.playerMode === 2 && p1 && p2) {
-                    ui.weapon.innerText = `P1 ${WEAPONS[p1.weapon].icon} · P2 ${WEAPONS[p2.weapon].icon}`;
-                    ui.weaponIcon.innerText = alivePlayers.length === 2 ? '⚔' : '⚡';
-                    ui.weaponIcon.style.filter = alivePlayers.length === 2
-                        ? 'drop-shadow(0 0 10px #9bffe4)'
-                        : 'drop-shadow(0 0 8px #ff7ee9)';
-                } else if(p1) {
-                    const wep = WEAPONS[p1.weapon];
-                    ui.weapon.innerText = wep.name;
-                    ui.weaponIcon.innerText = wep.icon;
-                    ui.weaponIcon.style.filter = `drop-shadow(0 0 8px ${wep.color})`;
-                }
-            }
-            
-            if((p1 && p1.overheated) || (p2 && p2.overheated)) {
-                ui.heat.className = 'value critical';
-                ui.heatBar.className = 'heat-bar critical';
-            } else if(heatPercent > 70) {
-                ui.heat.className = 'value warning';
-                ui.heatBar.className = 'heat-bar warning';
-            } else {
-                ui.heat.className = 'value';
-                ui.heatBar.className = 'heat-bar';
-            }
-
-            ui.status.classList.remove('overdrive', 'alert');
-            const criticalHull = hull1 < 26 || (state.playerMode === 2 && hull2 < 26);
-            if((Entities.alivePlayers().length <= 1 && state.teamLives <= 2) || criticalHull) {
-                ui.status.innerText = "CRITICAL: LAST CHANCE";
-                ui.status.classList.add('alert');
-            } else if((p1 && p1.overheated) || (p2 && p2.overheated)) {
-                ui.status.innerText = "WEAPON OVERHEATED";
-                ui.status.classList.add('alert');
-            } else if(state.overdriveTimer > 0) {
-                ui.status.innerText = "OVERDRIVE " + state.overdriveTimer.toFixed(1) + "s";
-                ui.status.classList.add('overdrive');
-            } else {
-                ui.status.innerText = state.difficulty ? state.difficulty.label : ("LEVEL " + state.wave + " ACTIVE");
-            }
+    function loop(now) {
+        requestAnimationFrame(loop);
+        if(!lastTime) {
+            lastTime = now;
+            return;
         }
 
+        const dt = Math.min(CONFIG.dtMax, (now - lastTime) / 1000);
+        lastTime = now;
+
+        state.accumulator += dt;
+        let steps = 0;
+        while(state.accumulator >= CONFIG.fixedStep && steps < CONFIG.maxSubSteps) {
+            updateGame(CONFIG.fixedStep);
+            state.accumulator -= CONFIG.fixedStep;
+            steps++;
+        }
+        if(steps >= CONFIG.maxSubSteps) {
+            state.accumulator = 0;
+        }
+
+        updatePerf(dt);
+        updateDebugOverlay(dt);
+        const liveDpr = Math.min(CONFIG.maxDpr, window.devicePixelRatio || 1);
+        if(Math.abs(liveDpr - state.dpr) > 0.01) {
+            resize();
+        }
         render(dt);
     }
 
     // --- RENDERER ---
     function render(dt) {
-        // Clear
-        const hue = (state.t * 18) % 360;
-        const rainbowBg = ctx.createLinearGradient(0, 0, state.width, state.height);
-        rainbowBg.addColorStop(0, `hsla(${hue.toFixed(1)}, 75%, 10%, 1)`);
-        rainbowBg.addColorStop(0.33, `hsla(${((hue + 90) % 360).toFixed(1)}, 72%, 10%, 1)`);
-        rainbowBg.addColorStop(0.66, `hsla(${((hue + 180) % 360).toFixed(1)}, 70%, 9%, 1)`);
-        rainbowBg.addColorStop(1, `hsla(${((hue + 270) % 360).toFixed(1)}, 72%, 10%, 1)`);
-        ctx.fillStyle = rainbowBg;
-        ctx.fillRect(0, 0, state.width, state.height);
-
-        const nebula = ctx.createRadialGradient(
-            state.width * 0.2 + Math.sin(state.t * 0.5) * 80,
-            state.height * 0.3,
-            20,
-            state.width * 0.2,
-            state.height * 0.3,
-            state.width * 0.65
-        );
-        nebula.addColorStop(0, `hsla(${((hue + 35) % 360).toFixed(1)}, 90%, 55%, 0.14)`);
-        nebula.addColorStop(0.5, `hsla(${((hue + 165) % 360).toFixed(1)}, 88%, 52%, 0.09)`);
-        nebula.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = nebula;
-        ctx.fillRect(0, 0, state.width, state.height);
+        const scaleX = canvas.width / state.width;
+        const scaleY = canvas.height / state.height;
+        ctx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'source-over';
+        if(RenderCache.bg) {
+            ctx.drawImage(RenderCache.bg, 0, 0, state.width, state.height);
+        } else {
+            ctx.fillStyle = '#050a16';
+            ctx.fillRect(0, 0, state.width, state.height);
+        }
 
         // Screen Shake
         ctx.save();
@@ -1895,38 +2313,54 @@
         }
         
         // Fullscreen flash overlays
-        for(let i=Entities.overlays.length-1; i>=0; i--) {
-            const o = Entities.overlays[i];
-            ctx.fillStyle = o.color;
-            ctx.globalCompositeOperation = 'lighter';
-            ctx.fillRect(-20, -20, state.width+40, state.height+40);
-            ctx.globalCompositeOperation = 'source-over';
-            o.t -= dt;
-            if(o.t <= 0) Entities.overlays.splice(i, 1);
+        for(let i=0; i<Entities.overlays.length; i++) {
+            Entities.overlays[i].draw(ctx);
         }
         
-        // Vignette
-        const grad = ctx.createRadialGradient(
-            state.width/2, state.height/2, state.height*0.35,
-            state.width/2, state.height/2, state.height*0.75
-        );
-        grad.addColorStop(0, 'transparent');
-        grad.addColorStop(1, 'rgba(0,0,0,0.7)');
-        ctx.fillStyle = grad;
-        ctx.fillRect(-20, -20, state.width+40, state.height+40);
+        if(RenderCache.vignette) {
+            ctx.drawImage(RenderCache.vignette, 0, 0, state.width, state.height);
+        }
 
         ctx.restore();
     }
 
     // --- INIT ---
+    function postFrameHeight() {
+        if(window.parent && window.parent !== window) {
+            const frameHeight = Math.ceil(state.displayHeight + CONFIG.safeMargin * 2 + 8);
+            window.parent.postMessage({ type: 'streamlit:setFrameHeight', height: frameHeight }, '*');
+            window.parent.postMessage({ type: 'void-runner:set-frame-height', height: frameHeight }, '*');
+        }
+    }
+
     function resize() {
-        state.width = window.innerWidth;
-        state.height = window.innerHeight;
-        canvas.width = state.width;
-        canvas.height = state.height;
+        state.width = CONFIG.baseWidth;
+        state.height = CONFIG.baseHeight;
+
+        const shellRect = shell.getBoundingClientRect();
+        const availableWidth = Math.max(320, shellRect.width - CONFIG.safeMargin * 2);
+        const availableHeight = Math.max(240, shellRect.height - CONFIG.safeMargin * 2);
+        const scale = Math.min(availableWidth / state.width, availableHeight / state.height);
+
+        state.viewportScale = Math.max(0.2, scale);
+        state.displayWidth = Math.max(1, Math.floor(state.width * state.viewportScale));
+        state.displayHeight = Math.max(1, Math.floor(state.height * state.viewportScale));
+
+        viewport.style.width = state.displayWidth + 'px';
+        viewport.style.height = state.displayHeight + 'px';
+
+        state.dpr = Math.min(CONFIG.maxDpr, window.devicePixelRatio || 1);
+        const backingScale = state.dpr * CONFIG.renderScale;
+        canvas.width = Math.max(1, Math.round(state.width * backingScale));
+        canvas.height = Math.max(1, Math.round(state.height * backingScale));
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+
+        RenderCache.build();
         if(Entities.starfield) {
             Entities.starfield = new Starfield();
         }
+        postFrameHeight();
     }
 
     function setPlayerMode(mode) {
@@ -1939,6 +2373,7 @@
             const buttonMode = Number(btn.dataset.mode || 1);
             btn.classList.toggle('active', buttonMode === state.playerMode);
         });
+        refreshAxes();
     }
 
     function resetInput() {
@@ -1959,12 +2394,44 @@
         input.p2.y = 0;
     }
 
+    function refreshAxes() {
+        input.p1.x = (input.p1.right ? 1 : 0) - (input.p1.left ? 1 : 0);
+        input.p1.y = (input.p1.down ? 1 : 0) - (input.p1.up ? 1 : 0);
+        if(state.playerMode === 2) {
+            input.p2.x = (input.p2.right ? 1 : 0) - (input.p2.left ? 1 : 0);
+            input.p2.y = (input.p2.down ? 1 : 0) - (input.p2.up ? 1 : 0);
+        } else {
+            input.p2.x = 0;
+            input.p2.y = 0;
+            input.p2.fire = false;
+        }
+    }
+
+    function setVolumeFromSlider() {
+        const sliderVal = ui.volume ? Number(ui.volume.value) : Math.round(CONFIG.audioVolume * 100);
+        const safeVal = clamp(sliderVal, 0, 100);
+        Audio.setVolume(safeVal / 100);
+        if(ui.volumeValue) {
+            ui.volumeValue.innerText = safeVal + '%';
+        }
+    }
+
+    function toggleAudio() {
+        Audio.setMuted(!Audio.muted);
+        const on = !Audio.muted;
+        ui.audioBtn.querySelector('span').innerText = on ? "SOUND: ON" : "SOUND: OFF";
+        ui.audioBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+
     function startGame(mode = state.playerMode) {
-        if(state.running) return;
+        if(state.running && !state.gameOver) return;
         setPlayerMode(mode);
         Audio.init();
+        Audio.ensureRunning();
+        setVolumeFromSlider();
         Entities.clear(state.playerMode);
         resetInput();
+
         state.running = true;
         state.gameOver = false;
         state.score = 0;
@@ -1977,10 +2444,11 @@
         state.shield = state.playerMode === 2 ? 6 : 7;
         state.teamLives = state.playerMode === 2 ? 7 : 9;
         state.overdriveTimer = 0;
+        state.accumulator = 0;
         lastTime = performance.now();
         spawnTimer = 0;
         droneSpawnTimer = 0;
-        
+
         ui.start.classList.add('hidden');
         ui.over.classList.add('hidden');
         ui.score.classList.remove('hidden');
@@ -2000,43 +2468,60 @@
             ui.weaponIcon.innerText = '⚔';
             ui.weaponIcon.style.filter = 'drop-shadow(0 0 10px #9bffe4)';
             ui.heat.innerText = 'P1 0% | P2 0%';
-            ui.heatBar.style.width = '0%';
         } else {
             ui.weapon.innerText = WEAPONS.BLASTER.name;
             ui.weaponIcon.innerText = WEAPONS.BLASTER.icon;
             ui.weaponIcon.style.filter = 'drop-shadow(0 0 8px #00f3ff)';
             ui.heat.innerText = 'P1 0%';
-            ui.heatBar.style.width = '0%';
         }
+        ui.heatBar.style.width = '0%';
     }
 
-    // Input
-    window.addEventListener('resize', resize);
-
-    function refreshAxes() {
-        input.p1.x = (input.p1.right ? 1 : 0) - (input.p1.left ? 1 : 0);
-        input.p1.y = (input.p1.down ? 1 : 0) - (input.p1.up ? 1 : 0);
-        input.p1.fire = input.p1.up || input.p1.down || input.p1.left || input.p1.right;
-        if(state.playerMode === 2) {
-            input.p2.x = (input.p2.right ? 1 : 0) - (input.p2.left ? 1 : 0);
-            input.p2.y = (input.p2.down ? 1 : 0) - (input.p2.up ? 1 : 0);
-        } else {
-            input.p2.x = 0;
-            input.p2.y = 0;
-        }
-    }
-
-    function toggleAudio() {
-        Audio.enabled = !Audio.enabled;
-        ui.audioBtn.querySelector('span').innerText = Audio.enabled ? "SOUND: ON" : "SOUND: OFF";
-        ui.audioBtn.setAttribute('aria-pressed', Audio.enabled);
+    function handleDeployAction() {
+        startGame(state.playerMode);
     }
 
     const GAME_KEYS = new Set([
         'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
         'KeyW', 'KeyA', 'KeyS', 'KeyD',
-        'KeyF', 'Enter', 'Digit1', 'Digit2', 'Numpad1', 'Numpad2', 'KeyM'
+        'Space', 'KeyF', 'Enter', 'Digit1', 'Digit2', 'Numpad1', 'Numpad2', 'KeyM', 'F3'
     ]);
+
+    window.addEventListener('resize', resize);
+    window.addEventListener('orientationchange', resize);
+    window.addEventListener('blur', resetInput);
+
+    ui.modeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const mode = Number(btn.dataset.mode || 1);
+            setPlayerMode(mode);
+            Audio.init();
+            Audio.sfx.uiClick();
+        });
+    });
+
+    if(ui.deployBtn) {
+        ui.deployBtn.addEventListener('click', () => {
+            Audio.init();
+            Audio.sfx.uiClick();
+            handleDeployAction();
+        });
+    }
+
+    if(ui.audioBtn) {
+        ui.audioBtn.addEventListener('click', () => {
+            Audio.init();
+            Audio.sfx.uiClick();
+            toggleAudio();
+        });
+    }
+
+    if(ui.volume) {
+        ui.volume.addEventListener('input', () => {
+            Audio.init();
+            setVolumeFromSlider();
+        });
+    }
 
     window.addEventListener('keydown', e => {
         if(GAME_KEYS.has(e.code)) {
@@ -2048,13 +2533,21 @@
             return;
         }
 
+        if(e.code === 'F3') {
+            state.debugPerf = !state.debugPerf;
+            if(!state.debugPerf) {
+                ui.perfDebug.classList.add('hidden');
+            }
+            return;
+        }
+
         if(!state.running) {
             if(e.code === 'Digit1' || e.code === 'Numpad1') {
                 setPlayerMode(1);
             } else if(e.code === 'Digit2' || e.code === 'Numpad2') {
                 setPlayerMode(2);
             } else if(e.code === 'Enter') {
-                startGame();
+                handleDeployAction();
             }
             return;
         }
@@ -2063,6 +2556,7 @@
         if(e.code === 'ArrowDown') input.p1.down = true;
         if(e.code === 'ArrowLeft') input.p1.left = true;
         if(e.code === 'ArrowRight') input.p1.right = true;
+        if(e.code === 'Space') input.p1.fire = true;
 
         if(state.playerMode === 2) {
             if(e.code === 'KeyW') input.p2.up = true;
@@ -2074,7 +2568,7 @@
 
         refreshAxes();
     });
-    
+
     window.addEventListener('keyup', e => {
         if(GAME_KEYS.has(e.code)) {
             e.preventDefault();
@@ -2085,6 +2579,7 @@
         if(e.code === 'ArrowDown') input.p1.down = false;
         if(e.code === 'ArrowLeft') input.p1.left = false;
         if(e.code === 'ArrowRight') input.p1.right = false;
+        if(e.code === 'Space') input.p1.fire = false;
 
         if(state.playerMode === 2) {
             if(e.code === 'KeyW') input.p2.up = false;
@@ -2099,7 +2594,12 @@
 
     // Boot
     Assets.init();
+    if(ui.volume) ui.volume.value = String(Math.round(CONFIG.audioVolume * 100));
+    setVolumeFromSlider();
     setPlayerMode(1);
+    Entities.clear(1);
+    state.running = false;
+    ui.score.classList.add('hidden');
     resize();
     requestAnimationFrame(loop);
 
