@@ -52,9 +52,11 @@
         finalKills: document.getElementById('finalKills'),
         maxCombo: document.getElementById('maxCombo'),
         audioBtn: document.getElementById('audioToggle'),
+        pauseBtn: document.getElementById('pauseButton'),
         volume: document.getElementById('volumeSlider'),
         volumeValue: document.getElementById('volumeValue'),
         deployBtn: document.getElementById('deployButton'),
+        pauseOverlay: document.getElementById('pauseOverlay'),
         controlHint: document.getElementById('controlHint'),
         modeBtns: Array.from(document.querySelectorAll('.mode-btn')),
         perfDebug: document.getElementById('perfDebug')
@@ -90,6 +92,7 @@
         fpsSampleTime: 0,
         fpsSampleFrames: 0,
         lowQuality: false,
+        paused: false,
         debugPerf: CONFIG.debugPerf,
         debugTicker: 0
     };
@@ -108,8 +111,8 @@
     };
 
     const CONTROL_HINTS = {
-        1: 'P1: ARROWS MOVE | P1 FIRE: SPACE | CLICK DEPLOY TO START',
-        2: 'P1: ARROWS + SPACE | P2: WASD + F | CLICK MODE + DEPLOY'
+        1: 'P1: ARROWS MOVE | P1 FIRE: SPACE | CLICK DEPLOY | PAUSE: P',
+        2: 'P1: ARROWS + SPACE | P2: WASD + F | CLICK MODE + DEPLOY | PAUSE: P'
     };
 
     function clamp(value, min, max) {
@@ -478,9 +481,21 @@
         delayGain: null,
         noiseBuffer: null,
         initialized: false,
+        unlockAttached: false,
         enabled: true,
         muted: false,
         volume: CONFIG.audioVolume,
+        attachUnlockListeners() {
+            if(this.unlockAttached) return;
+            this.unlockAttached = true;
+            const unlock = () => {
+                this.init();
+                this.ensureRunning();
+            };
+            window.addEventListener('pointerdown', unlock, { capture: true, once: true });
+            window.addEventListener('touchstart', unlock, { capture: true, once: true });
+            window.addEventListener('keydown', unlock, { capture: true, once: true });
+        },
         init() {
             if(this.initialized) return;
             const AC = window.AudioContext || window.webkitAudioContext;
@@ -1909,6 +1924,8 @@
                 ui.score.classList.add('hidden');
                 ui.over.classList.remove('hidden');
                 state.running = false;
+                state.paused = false;
+                updatePauseUi();
             }
         },
         
@@ -2174,6 +2191,9 @@
     }
 
     function updateGame(dt) {
+        if(state.paused) {
+            return;
+        }
         state.t += dt;
 
         if(state.hitStop > 0) {
@@ -2417,10 +2437,39 @@
     }
 
     function toggleAudio() {
+        Audio.init();
+        Audio.ensureRunning();
         Audio.setMuted(!Audio.muted);
         const on = !Audio.muted;
         ui.audioBtn.querySelector('span').innerText = on ? "SOUND: ON" : "SOUND: OFF";
         ui.audioBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+
+    function updatePauseUi() {
+        if(ui.pauseBtn) {
+            ui.pauseBtn.querySelector('span').innerText = state.paused ? 'RESUME' : 'PAUSE';
+            ui.pauseBtn.setAttribute('aria-pressed', state.paused ? 'true' : 'false');
+        }
+        if(ui.pauseOverlay) {
+            const show = state.running && !state.gameOver && state.paused;
+            ui.pauseOverlay.classList.toggle('hidden', !show);
+        }
+    }
+
+    function setPaused(paused) {
+        if(!state.running || state.gameOver) return;
+        const next = !!paused;
+        if(state.paused === next) return;
+        state.paused = next;
+        resetInput();
+        if(state.paused) {
+            ui.status.innerText = 'PAUSED';
+            ui.status.classList.remove('overdrive');
+            ui.status.classList.add('alert');
+        } else {
+            lastTime = performance.now();
+        }
+        updatePauseUi();
     }
 
     function startGame(mode = state.playerMode) {
@@ -2444,6 +2493,7 @@
         state.shield = state.playerMode === 2 ? 6 : 7;
         state.teamLives = state.playerMode === 2 ? 7 : 9;
         state.overdriveTimer = 0;
+        state.paused = false;
         state.accumulator = 0;
         lastTime = performance.now();
         spawnTimer = 0;
@@ -2475,16 +2525,22 @@
             ui.heat.innerText = 'P1 0%';
         }
         ui.heatBar.style.width = '0%';
+        updatePauseUi();
     }
 
     function handleDeployAction() {
+        if(state.running && state.paused && !state.gameOver) {
+            setPaused(false);
+            return;
+        }
         startGame(state.playerMode);
     }
 
     const GAME_KEYS = new Set([
         'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
         'KeyW', 'KeyA', 'KeyS', 'KeyD',
-        'Space', 'KeyF', 'Enter', 'Digit1', 'Digit2', 'Numpad1', 'Numpad2', 'KeyM', 'F3'
+        'Space', 'KeyF', 'Enter', 'Escape', 'KeyP',
+        'Digit1', 'Digit2', 'Numpad1', 'Numpad2', 'KeyM', 'F3'
     ]);
 
     window.addEventListener('resize', resize);
@@ -2516,6 +2572,14 @@
         });
     }
 
+    if(ui.pauseBtn) {
+        ui.pauseBtn.addEventListener('click', () => {
+            Audio.init();
+            Audio.sfx.uiClick();
+            setPaused(!state.paused);
+        });
+    }
+
     if(ui.volume) {
         ui.volume.addEventListener('input', () => {
             Audio.init();
@@ -2541,6 +2605,11 @@
             return;
         }
 
+        if((e.code === 'KeyP' || e.code === 'Escape') && state.running && !state.gameOver) {
+            setPaused(!state.paused);
+            return;
+        }
+
         if(!state.running) {
             if(e.code === 'Digit1' || e.code === 'Numpad1') {
                 setPlayerMode(1);
@@ -2551,6 +2620,8 @@
             }
             return;
         }
+
+        if(state.paused) return;
 
         if(e.code === 'ArrowUp') input.p1.up = true;
         if(e.code === 'ArrowDown') input.p1.down = true;
@@ -2574,6 +2645,7 @@
             e.preventDefault();
         }
         if(!state.running) return;
+        if(state.paused) return;
 
         if(e.code === 'ArrowUp') input.p1.up = false;
         if(e.code === 'ArrowDown') input.p1.down = false;
@@ -2594,12 +2666,15 @@
 
     // Boot
     Assets.init();
+    Audio.attachUnlockListeners();
     if(ui.volume) ui.volume.value = String(Math.round(CONFIG.audioVolume * 100));
     setVolumeFromSlider();
     setPlayerMode(1);
     Entities.clear(1);
     state.running = false;
+    state.paused = false;
     ui.score.classList.add('hidden');
+    updatePauseUi();
     resize();
     requestAnimationFrame(loop);
 

@@ -212,6 +212,12 @@ body::before {
   gap: 8px;
 }
 
+.button-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 .volume-control {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -449,6 +455,11 @@ body::before {
     0 0 0 1px rgba(127, 255, 109, 0.35) inset;
   transition: all 0.2s ease;
   overflow: hidden;
+}
+
+.button-row .hud-button {
+  width: 100%;
+  max-width: none;
 }
 
 .hud-button::before {
@@ -825,6 +836,34 @@ body::before {
   z-index: 7;
 }
 
+.pause-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 10px;
+  text-align: center;
+  background: rgba(2, 8, 20, 0.5);
+  backdrop-filter: blur(2px);
+  z-index: 6;
+  pointer-events: none;
+}
+
+.pause-title {
+  font-family: 'Audiowide', 'Orbitron', monospace;
+  font-size: clamp(32px, 6vw, 64px);
+  letter-spacing: 6px;
+  color: #d9fbff;
+  text-shadow: 0 0 22px rgba(0, 243, 255, 0.85), 0 0 44px rgba(0, 243, 255, 0.35);
+}
+
+.pause-subtitle {
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(12px, 2.2vw, 18px);
+  letter-spacing: 2px;
+  color: #8ed9ee;
+}
+
 body.single-player .p2-only {
   display: none;
 }
@@ -863,6 +902,10 @@ body.single-player .p2-only {
 
   .audio-chip {
     min-width: 220px;
+  }
+
+  .button-row {
+    grid-template-columns: 1fr;
   }
 
   .volume-control {

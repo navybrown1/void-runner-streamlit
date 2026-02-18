@@ -72,9 +72,14 @@
           <div class="hud-chip audio-chip">
             <span class="label">AUDIO</span>
             <div class="audio-controls">
-              <button id="audioToggle" type="button" class="hud-button" aria-pressed="true">
-                <span>SOUND: ON</span>
-              </button>
+              <div class="button-row">
+                <button id="audioToggle" type="button" class="hud-button" aria-pressed="true">
+                  <span>SOUND: ON</span>
+                </button>
+                <button id="pauseButton" type="button" class="hud-button" aria-pressed="false">
+                  <span>PAUSE</span>
+                </button>
+              </div>
               <label class="volume-control" for="volumeSlider">
                 <span>VOL</span>
                 <input id="volumeSlider" type="range" min="0" max="100" step="1" value="70" aria-label="Master volume">
@@ -156,6 +161,11 @@
           </div>
           <p class="start-prompt">PRESS ENTER OR CLICK DEPLOY TO REDEPLOY</p>
         </section>
+
+        <div id="pauseOverlay" class="pause-overlay hidden">
+          <div class="pause-title">PAUSED</div>
+          <div class="pause-subtitle">CLICK RESUME OR PRESS P</div>
+        </div>
 
         <div id="controlHint">P1: ARROWS + SPACE | P2: WASD + F | MUTE: M | CLICK: MODE + DEPLOY</div>
         <div id="perfDebug" class="hidden" aria-live="polite"></div>
