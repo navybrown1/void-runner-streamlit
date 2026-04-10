@@ -24,8 +24,8 @@ def load_game_html() -> str:
 
 def main() -> None:
     st.set_page_config(
-        page_title="Void Runner",
-        page_icon="🕹️",
+        page_title="Snake",
+        page_icon="🐍",
         layout="wide",
         initial_sidebar_state="collapsed",
     )
